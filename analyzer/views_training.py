@@ -1,6 +1,7 @@
 """Pages d'entraînement : exercices à thème et parties de référence."""
 import json
 
+import chess
 import chess.svg
 from django.contrib import messages
 from django.db.models import Count, Q
@@ -9,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Export, Game, Puzzle, PuzzleAttempt, ReferenceStudy
+from .models import Export, Game, Puzzle, PuzzleAttempt, PuzzleSprint, ReferenceStudy
 from .services import engine, jobs, puzzle_themes, puzzles, recommendations, references, training
 
 
@@ -56,7 +57,23 @@ def training_home(request):
         "total": Puzzle.objects.count(),
         "modes": [puzzle_themes.info("mix"), puzzle_themes.info("review")],
         "references": references.recommend(export, recs, limit=3),
+        "daily": _daily(),
+        "sprint_best": training.sprint_stats()["best"],
+        "pieces": _pieces(),
     })
+
+
+def _daily():
+    puzzle, done = training.daily_puzzle()
+    if not puzzle:
+        return None
+    board = chess.Board(puzzle.fen)
+    setup = puzzle.move_list[0]
+    board.push_uci(setup)
+    return {"puzzle": puzzle, "done": done, "fen": board.fen(), "last": setup,
+            "color": "w" if board.turn == chess.WHITE else "b",
+            "themes": [puzzle_themes.info(t) for t in puzzle.theme_list
+                       if puzzle_themes.is_known(t) and puzzle_themes.info(t)["category"] in ("mat", "tactique", "finale")][:2]}
 
 
 def _theme_or_404(theme):
@@ -131,6 +148,40 @@ def training_progress(request):
         "ov": training.overview(), "rows": rows, "strong": strong,
         "weak": [w for w in weak if w not in strong or w["rate"] < 60], "recent": recent,
     })
+
+
+def training_sprint(request):
+    training.ensure_bank()
+    return render(request, "analyzer/training_sprint.html", {
+        "stats": training.sprint_stats(), "durations": training.SPRINT_DURATIONS,
+        "max_mistakes": training.SPRINT_MAX_MISTAKES, "pieces": _pieces(),
+        "start": training.sprint_start_rating(), "rating": training.current_rating(),
+    })
+
+
+def training_sprint_batch(request):
+    def as_int(name, default):
+        v = request.GET.get(name, "")
+        return int(v) if v.lstrip("-").isdigit() else default
+    start = as_int("start", training.sprint_start_rating())
+    exclude = [int(x) for x in request.GET.get("exclude", "").split(",") if x.isdigit()]
+    items = training.sprint_batch(start, offset=max(0, as_int("offset", 0)), n=min(20, max(1, as_int("n", 12))),
+                                  exclude=exclude)
+    return JsonResponse({"start": start, "puzzles": [puzzles.payload(p) for p in items]})
+
+
+@require_POST
+def training_sprint_result(request):
+    try:
+        data = json.loads(request.body or "{}")
+        duration = int(data.get("duration"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "données invalides"}, status=400)
+    if duration not in training.SPRINT_DURATIONS:
+        return JsonResponse({"error": "durée invalide"}, status=400)
+    run, record = training.record_sprint(duration, int(data.get("score") or 0), int(data.get("mistakes") or 0),
+                                         data.get("best_rating"))
+    return JsonResponse({"score": run.score, "record": record, "best": training.sprint_best(duration)})
 
 
 @require_POST

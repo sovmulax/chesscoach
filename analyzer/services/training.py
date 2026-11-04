@@ -12,7 +12,7 @@ import chess
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import Export, Game, Puzzle, PuzzleAttempt, PuzzleScan
+from ..models import Export, Game, Puzzle, PuzzleAttempt, PuzzleScan, PuzzleSprint
 from . import puzzle_themes, puzzles
 from .notation import display
 
@@ -108,6 +108,69 @@ def next_puzzle(theme="mix", exclude=()):
     failed = list(qs.filter(id__in=failed_puzzle_ids()).values_list("id", flat=True))
     pool = failed or list(qs.values_list("id", flat=True)[:400])
     return Puzzle.objects.get(pk=random.choice(pool)) if pool else None
+
+
+# ---------------------------------------------------------------------------
+# Exercice du jour et course contre la montre
+# ---------------------------------------------------------------------------
+SPRINT_DURATIONS = (180, 300)
+SPRINT_MAX_MISTAKES = 3
+
+
+def daily_puzzle(day=None):
+    """Le même exercice pour toute la journée (hors exercices tirés de tes parties). -> (exercice, déjà fait ?)"""
+    day = day or timezone.localdate()
+    qs = Puzzle.objects.exclude(source=Puzzle.SOURCE_GAME).order_by("id")
+    ids = list(qs.filter(rating__gte=750, rating__lte=2000).values_list("id", flat=True)) or list(qs.values_list("id", flat=True))
+    if not ids:
+        return None, False
+    puzzle = Puzzle.objects.get(pk=random.Random(day.toordinal()).choice(ids))
+    start = timezone.make_aware(dt.datetime.combine(day, dt.time.min))
+    done = PuzzleAttempt.objects.filter(puzzle=puzzle, created_at__gte=start,
+                                        created_at__lt=start + dt.timedelta(days=1)).exists()
+    return puzzle, done
+
+
+def sprint_start_rating():
+    return max(450, current_rating() - 350)
+
+
+def sprint_batch(start, offset=0, n=12, exclude=()):
+    """Exercices de difficulté croissante (≈ +30 points par exercice) pour la course."""
+    used = set(exclude)
+    pool = list(Puzzle.objects.exclude(source=Puzzle.SOURCE_GAME).values_list("id", "rating"))
+    out = []
+    for i in range(offset, offset + n):
+        target = start + 30 * i
+        near = sorted((abs(r - target), pid) for pid, r in pool if pid not in used)
+        if not near:
+            break
+        close = [pid for d, pid in near[:8] if d <= 60]
+        pid = random.choice(close) if close else near[0][1]
+        used.add(pid)
+        out.append(pid)
+    found = Puzzle.objects.in_bulk(out)
+    return sorted((found[i] for i in out), key=lambda p: p.rating)
+
+
+def record_sprint(duration, score, mistakes, best_rating=None):
+    previous = sprint_best(duration)
+    run = PuzzleSprint.objects.create(duration=duration, score=max(0, score), mistakes=max(0, mistakes),
+                                      best_rating=best_rating)
+    return run, previous is None or run.score > previous
+
+
+def sprint_best(duration):
+    return (PuzzleSprint.objects.filter(duration=duration).order_by("-score")
+            .values_list("score", flat=True).first())
+
+
+def sprint_stats():
+    return {
+        "best": {d: sprint_best(d) for d in SPRINT_DURATIONS},
+        "recent": list(PuzzleSprint.objects.all()[:10]),
+        "runs": PuzzleSprint.objects.count(),
+    }
 
 
 # ---------------------------------------------------------------------------

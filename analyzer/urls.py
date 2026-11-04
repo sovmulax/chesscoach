@@ -21,6 +21,9 @@ urlpatterns = [
     # Exercices à thème
     path("exercices/", training.training_home, name="training_home"),
     path("exercices/progression/", training.training_progress, name="training_progress"),
+    path("exercices/course/", training.training_sprint, name="training_sprint"),
+    path("exercices/api/course/", training.training_sprint_batch, name="training_sprint_batch"),
+    path("exercices/api/course/resultat/", training.training_sprint_result, name="training_sprint_result"),
     path("exercices/jouer/<str:theme>/", training.training_play, name="training_play"),
     path("exercices/api/suivant/", training.training_next, name="training_next"),
     path("exercices/api/<int:pk>/tentative/", training.training_attempt, name="training_attempt"),

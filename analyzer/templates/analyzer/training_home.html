@@ -34,6 +34,34 @@
   </div>
 </section>
 
+<section class="section grid grid-2 modes">
+  {% if daily %}
+  <div class="card mode-card">
+    <div class="mini-board" data-mini-board data-fen="{{ daily.fen }}" data-color="{{ daily.color }}" data-last="{{ daily.last }}" aria-hidden="true"></div>
+    <div class="mode-body">
+      <span class="eyebrow" style="margin:0">{% icon "calendar" %} Exercice du jour</span>
+      <h3 style="margin:.6rem 0 .3rem">Les {% if daily.color == "w" %}Blancs{% else %}Noirs{% endif %} jouent et gagnent</h3>
+      <p class="muted small" style="margin:0">Difficulté {{ daily.puzzle.rating }}{% for t in daily.themes %} · {{ t.label }}{% endfor %}. Le même exercice toute la journée.</p>
+      <div class="row row-tight" style="margin-top:.9rem">
+        {% if daily.done %}<span class="badge badge-done">{% icon "check" %} fait aujourd'hui</span>{% endif %}
+        <a class="btn {% if not daily.done %}btn-primary{% endif %} btn-small" href="{% url 'analyzer:training_play' 'mix' %}?id={{ daily.puzzle.pk }}">{% icon "play" %} {% if daily.done %}Le revoir{% else %}Résoudre{% endif %}</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  <a class="card mode-card mode-sprint" href="{% url 'analyzer:training_sprint' %}">
+    <span class="mode-icon">{% icon "timer" %}</span>
+    <div class="mode-body">
+      <span class="eyebrow" style="margin:0">{% icon "flame" %} Course contre la montre</span>
+      <h3 style="margin:.6rem 0 .3rem">Un maximum d'exercices en 3 ou 5 minutes</h3>
+      <p class="muted small" style="margin:0">Difficulté croissante, 3 erreurs maximum.
+        Records : {% for d, b in sprint_best.items %}{% widthratio d 60 1 %} min → <b>{{ b|default_if_none:"—" }}</b>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+      <span class="btn btn-small btn-soft" style="margin-top:.9rem">{% icon "play" %} Lancer une course</span>
+    </div>
+  </a>
+</section>
+{{ pieces|json_script:"pieces-data" }}
+
 {% if recommended %}
 <section class="section">
   <div class="section-head">

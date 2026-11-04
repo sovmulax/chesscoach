@@ -125,6 +125,9 @@ Rubrique « Exercices » :
   descend selon la difficulté, et la page « Ma progression » détaille la réussite,
   la performance et le temps moyen par thème ;
 - les exercices ratés reviennent dans les **Révisions** ;
+- l'**exercice du jour** est le même pour toute la journée ;
+- la **course contre la montre** (3 ou 5 minutes, difficulté croissante, 3 erreurs
+  maximum) enregistre tes scores et tes records, sans toucher à ton classement ;
 - les thèmes **recommandés** viennent du diagnostic de ton dernier export ;
 - « Créer mes exercices » transforme **tes erreurs** (parties analysées) en
   exercices : retrouve le bon coup là où tu t'es trompé.
@@ -210,7 +213,7 @@ sont des conseils génériques toujours affichés.
 config/                     réglages Django
 analyzer/
   models.py                 Export (PGN ou compte Chess.com) et Game ;
-                            Puzzle, PuzzleAttempt, PuzzleScan, ReferenceStudy (entraînement)
+                            Puzzle, PuzzleAttempt, PuzzleSprint, PuzzleScan, ReferenceStudy (entraînement)
   services/
     pgn_import.py           lecture des PGN, détection du joueur, dédoublonnage
     chesscom.py             client de l'API publique Chess.com + synchro incrémentale
@@ -234,7 +237,7 @@ analyzer/
 ```
 
 > **Mise à jour d'une installation existante** : `python manage.py migrate`.
-> La migration `0003_training` ne fait qu'**ajouter** les tables de l'entraînement :
+> Les migrations `0003_training` et `0004_puzzle_sprint` ne font qu'**ajouter** les tables de l'entraînement :
 > les exports, les parties et leurs analyses ne sont pas modifiés.
 
 ---

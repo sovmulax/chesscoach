@@ -927,6 +927,12 @@
 
   function initTrainingHome() {
     initRatingChart();
+    const mini = $("[data-mini-board]"), piecesEl = $("#pieces-data");
+    if (mini && piecesEl) {
+      createBoard(mini, JSON.parse(piecesEl.textContent)).render(mini.dataset.fen, {
+        orientation: mini.dataset.color, lastMove: squaresOf(mini.dataset.last),
+      });
+    }
     $all("[data-gen-status][data-running]").forEach(card => {
       if (!card.dataset.running) return;
       poll(card.dataset.genStatus, d => {
@@ -1139,6 +1145,121 @@
     reset(data, false);
   }
 
+  // ================================================================ course contre la montre
+  function initSprint(cfg) {
+    const pieces = JSON.parse($("#pieces-data").textContent);
+    const boardEl = $("#board"), board = createBoard(boardEl, pieces);
+    const startEl = $("#sprint-start"), liveEl = $("#sprint-live"), overEl = $("#sprint-over");
+    const flash = $("#flash");
+    let st = null;
+    board.render("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", { orientation: "w" });
+
+    function fmtTime(ms) {
+      const sec = Math.max(0, Math.ceil(ms / 1000));
+      return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
+    }
+    function fetchMore() {
+      if (st.loading) return st.loading;
+      const seen = st.queue.map(p => p.id).join(",");
+      st.loading = fetch(`${cfg.batchUrl}?start=${cfg.start}&offset=${st.queue.length}&n=12&exclude=${seen}`)
+        .then(r => r.json()).then(d => { st.queue.push(...d.puzzles); st.loading = null; })
+        .catch(() => { st.loading = null; });
+      return st.loading;
+    }
+    function hearts() {
+      $all("#sprint-hearts .icon").forEach((h, i) => h.classList.toggle("lost", i < st.mistakes));
+    }
+    function pulse(ok) {
+      if (!flash || !motionOK()) return;
+      flash.className = "sprint-flash " + (ok ? "ok" : "ko");
+      void flash.offsetWidth;
+      flash.classList.add("on");
+    }
+    function load() {
+      if (!st || st.over) return;
+      if (st.queue.length - st.idx < 5) fetchMore();
+      const p = st.queue[st.idx];
+      if (!p) { (st.loading || fetchMore()).then(() => { if (st.queue[st.idx]) load(); else end("Plus d'exercices disponibles !"); }); return; }
+      st.p = p; st.step = 0; st.busy = true;
+      $("#turn-bar").innerHTML = `<span class="side side-${p.color}"></span><b>${p.color === "w" ? "Les Blancs" : "Les Noirs"} jouent</b><span class="spacer"></span><span class="badge">exercice ${st.idx + 1} · ${p.rating}</span>`;
+      board.render(p.start_fen, { orientation: p.color });
+      setTimeout(() => {
+        if (st.over || st.p !== p) return;
+        board.render(p.setup.fen, { orientation: p.color, movers: moversFor(p.setup.uci, p.start_fen), lastMove: squaresOf(p.setup.uci), check: checkSquare(p.setup.san, p.setup.fen) });
+        st.busy = false;
+        enable();
+      }, 280);
+    }
+    function enable() {
+      const step = st.p.steps[st.step];
+      board.enableInput({ color: st.p.color, legal: Object.keys(step.legal), onMove, choosePromotion: promotionPicker($("#promo"), pieces, st.p.color) });
+    }
+    function result(ok) {
+      st.results.push({ id: st.p.id, ok, rating: st.p.rating });
+      if (ok) { st.score++; st.bestRating = Math.max(st.bestRating || 0, st.p.rating); } else { st.mistakes++; hearts(); }
+      $("#sprint-score").textContent = st.score;
+      $("#sprint-strip").innerHTML = st.results.map(r => `<span class="sess ${r.ok ? "ok" : "ko"}">${r.ok ? "✓" : "✗"}</span>`).join("");
+      pulse(ok);
+      if (st.mistakes >= cfg.maxMistakes) return end(`${cfg.maxMistakes} erreurs : la course s'arrête.`);
+      st.idx++;
+      setTimeout(load, ok ? 250 : 650);
+    }
+    function onMove(uci, info) {
+      if (!st || st.over || st.busy) return;
+      const p = st.p, step = p.steps[st.step], mv = step.legal[uci];
+      if (!mv) return;
+      const ok = step.accept.includes(uci) || mv.mate;
+      board.disableInput();
+      board.render(mv.fen, { orientation: p.color, movers: info && info.dragged ? null : moversFor(uci, step.fen), lastMove: squaresOf(uci), check: checkSquare(mv.san, mv.fen), badge: { sq: uci.slice(2, 4), cls: ok ? "best" : "blunder" } });
+      if (!ok) { st.busy = true; return result(false); }
+      if (mv.mate || st.step === p.steps.length - 1) { st.busy = true; return result(true); }
+      st.busy = true;
+      setTimeout(() => {
+        if (st.over || st.p !== p) return;
+        const r = step.reply;
+        board.render(r.fen, { orientation: p.color, movers: moversFor(r.uci, mv.fen), lastMove: squaresOf(r.uci), check: checkSquare(r.san, r.fen) });
+        st.step++;
+        st.busy = false;
+        enable();
+      }, 260);
+    }
+    function tick() {
+      const left = st.end - Date.now();
+      $("#sprint-clock").textContent = fmtTime(left);
+      $("#sprint-clock").classList.toggle("low", left < 20000);
+      if (left <= 0) end("Temps écoulé !");
+    }
+    function end(reason) {
+      if (!st || st.over) return;
+      st.over = true;
+      clearInterval(st.timer);
+      board.disableInput();
+      liveEl.hidden = true;
+      overEl.hidden = false;
+      overEl.innerHTML = `<div class="sprint-final"><div class="kpi-label">${esc(reason)}</div><div class="sprint-big">${st.score}</div><div class="muted">exercice${st.score > 1 ? "s" : ""} résolu${st.score > 1 ? "s" : ""}</div><div id="sprint-record" class="small" style="margin-top:.4rem"></div></div>` +
+        `<div class="sprint-review">${st.results.map((r, i) => `<a class="sess ${r.ok ? "ok" : "ko"}" href="${cfg.playUrl}?id=${r.id}" title="Exercice ${i + 1} (${r.rating}) : le revoir">${r.ok ? "✓" : "✗"}</a>`).join("")}</div>` +
+        `<p class="faint small" style="margin:.3rem 0 0">Clique sur un exercice pour le refaire tranquillement.</p>` +
+        `<div class="row row-tight" style="margin-top:1rem"><button type="button" class="btn btn-primary" data-again>${icon("refresh")} Rejouer</button><a class="btn btn-ghost" href="${location.pathname}">Changer de durée</a></div>`;
+      $("[data-again]", overEl).addEventListener("click", () => start(st.duration));
+      postJSON(cfg.resultUrl, { duration: st.duration, score: st.score, mistakes: st.mistakes, best_rating: st.bestRating || null })
+        .then(d => { $("#sprint-record").innerHTML = d.record ? `<span class="badge badge-win">${icon("trophy")} Nouveau record !</span>` : `Record : <b>${d.best}</b>`; })
+        .catch(() => {});
+    }
+    function start(duration) {
+      if (st && st.timer) clearInterval(st.timer);
+      st = { duration, queue: [], idx: 0, score: 0, mistakes: 0, results: [], over: false, loading: null, bestRating: 0 };
+      startEl.hidden = true; overEl.hidden = true; liveEl.hidden = false;
+      $("#sprint-score").textContent = "0"; $("#sprint-strip").innerHTML = ""; hearts();
+      $("#sprint-clock").textContent = fmtTime(duration * 1000);
+      fetchMore().then(() => {
+        st.end = Date.now() + duration * 1000;
+        st.timer = setInterval(tick, 200);
+        load();
+      });
+    }
+    $all("[data-duration]").forEach(b => b.addEventListener("click", () => start(parseInt(b.dataset.duration, 10))));
+  }
+
   // ================================================================ parties de référence
   function initReference() {
     const data = JSON.parse($("#ref-data").textContent);
@@ -1310,6 +1431,6 @@
   initAppearance();
   window.ChessCoach = {
     initJobPanel, initGameJob, initGameFilters, initEloChart, initGame, initHome, initDashboard,
-    initPuzzle, initReference, initTrainingHome, initRatingChart,
+    initPuzzle, initReference, initTrainingHome, initRatingChart, initSprint,
   };
 })();

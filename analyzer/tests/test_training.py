@@ -189,3 +189,38 @@ class PuzzleEngineTests(TestCase):
         self.assertIsNotNone(p)
         self.assertEqual(p["moves"].split()[1], "a1a8")
         self.assertIn("backRankMate", p["themes"])
+
+
+class SprintAndDailyTests(TestCase):
+    def setUp(self):
+        self.a = make("s1", BACK_RANK, rating=800)
+        self.b = make("s2", SMOTHERED, rating=900)
+        self.c = make("s3", FORK, rating=1000)
+
+    def test_daily_puzzle_is_stable_for_the_day(self):
+        p1, done = training.daily_puzzle()
+        p2, _ = training.daily_puzzle()
+        self.assertEqual(p1.pk, p2.pk)
+        self.assertFalse(done)
+        training.record_attempt(p1, solved=True)
+        self.assertTrue(training.daily_puzzle()[1])
+
+    def test_sprint_batch_increasing_and_unique(self):
+        items = training.sprint_batch(800, n=3)
+        self.assertEqual(len({p.pk for p in items}), 3)
+        self.assertEqual([p.rating for p in items], sorted(p.rating for p in items))
+
+    def test_sprint_api_and_record(self):
+        r = self.client.get("/exercices/api/course/?start=800&n=2")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json()["puzzles"]), 2)
+        post = lambda body: self.client.post("/exercices/api/course/resultat/", data=json.dumps(body),
+                                             content_type="application/json")
+        r1 = post({"duration": 180, "score": 5, "mistakes": 3, "best_rating": 1000}).json()
+        self.assertTrue(r1["record"])
+        r2 = post({"duration": 180, "score": 3, "mistakes": 3}).json()
+        self.assertFalse(r2["record"])
+        self.assertEqual(r2["best"], 5)
+        self.assertEqual(post({"duration": 42, "score": 1}).status_code, 400)
+        self.assertEqual(PuzzleAttempt.objects.count(), 0)  # la course ne touche pas au classement
+        self.assertEqual(self.client.get("/exercices/course/").status_code, 200)

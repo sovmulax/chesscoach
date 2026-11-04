@@ -213,6 +213,22 @@ class PuzzleAttempt(models.Model):
         return f"{'✓' if self.solved else '✗'} {self.puzzle.uid}"
 
 
+class PuzzleSprint(models.Model):
+    """Une course contre la montre : un maximum d'exercices en temps limité (non classée)."""
+
+    duration = models.IntegerField("durée (s)")
+    score = models.IntegerField(default=0)
+    mistakes = models.IntegerField(default=0)
+    best_rating = models.IntegerField("exercice le plus difficile réussi", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Course {self.duration // 60} min : {self.score}"
+
+
 class PuzzleScan(models.Model):
     """Partie déjà parcourue pour en tirer des exercices (évite de refaire le travail)."""
 
