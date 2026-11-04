@@ -1,0 +1,1 @@
+{% load chess_extras %}{% with g=games_by_id|get:ex.game_id %}{% if g %}<a class="chip" href="{% url 'analyzer:game_detail' ex.game_id %}?coup={{ ex.ply }}" title="Ouvrir la position">{{ g.played_at|date:"d/m" }} vs {{ g.opponent }} · coup {{ ex.n }} {{ ex.san|san }}</a>{% endif %}{% endwith %}

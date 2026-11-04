@@ -1,0 +1,125 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}{{ game.white }} – {{ game.black }}{% endblock %}
+{% block content %}
+<div class="row" style="align-items:flex-start">
+  <div>
+    <p class="muted" style="margin:0"><a href="{% url 'analyzer:export_games' export.pk %}">← {{ export.name }}</a></p>
+    <h1 style="margin-top:.25rem">{{ game.white }} <span class="faint">{{ game.white_elo|default:"" }}</span> – {{ game.black }} <span class="faint">{{ game.black_elo|default:"" }}</span></h1>
+    <p class="muted">
+      <span class="badge badge-{{ game.player_result }}">{{ game.player_result|result_label }}</span>
+      {{ game.played_at|date:"d/m/Y H:i"|default:game.date }} · {{ tc_labels|get:game.time_class }} ({{ game.time_control }}) · tu joues les {{ game.player_color|color_label }} ·
+      {{ game.opening_name }} · {{ game.termination }}
+      {% if game.url %} · <a href="{{ game.url }}" target="_blank" rel="noopener">voir sur Chess.com</a>{% endif %}
+    </p>
+  </div>
+  <div class="spacer"></div>
+  <div class="row" style="gap:.4rem">
+    {% if prev_id %}<a class="btn btn-small" href="{% url 'analyzer:game_detail' prev_id %}">← Précédente</a>{% endif %}
+    {% if next_id %}<a class="btn btn-small" href="{% url 'analyzer:game_detail' next_id %}">Suivante →</a>{% endif %}
+  </div>
+</div>
+
+<div class="card" id="game-job" data-status-url="{% url 'analyzer:game_status' game.pk %}" data-running="{% if running %}1{% endif %}">
+  <div class="row">
+    <div style="flex:1;min-width:220px">
+      {% if running %}<b>Analyse en cours…</b> <span class="muted">la page se rechargera automatiquement.</span>
+      {% elif game.is_analyzed %}<b>Analysée</b> <span class="muted">avec {{ game.analysis_time|num:2 }} s par position{% if game.stats.accuracy is not None %} · ta précision : <b>{{ game.stats.accuracy|num }}</b> (adversaire {{ game.stats.opp_accuracy|num }}){% endif %}</span>
+      {% else %}<b>Pas encore analysée.</b> <span class="muted">Tu peux déjà rejouer les coups.</span>{% endif %}
+      {% if game.error %}<div class="msg msg-error" style="margin-top:.5rem">{{ game.error }}</div>{% endif %}
+    </div>
+    {% if not running %}
+    <form method="post" action="{% url 'analyzer:game_analyze' game.pk %}" class="row" style="gap:.5rem">{% csrf_token %}
+      <select name="analysis_time" style="width:auto">
+        <option value="0.1">Standard (0,1 s)</option>
+        <option value="0.3" selected>Précise (0,3 s)</option>
+        <option value="1">Très précise (1 s)</option>
+      </select>
+      <button class="btn btn-primary" {% if not engine_ok %}disabled title="Stockfish introuvable"{% endif %}>{% if game.is_analyzed %}Réanalyser plus finement{% else %}Analyser cette partie{% endif %}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="game-layout section" style="margin-top:1.25rem">
+  <div>
+    <div class="board-box">
+      {% if game.is_analyzed %}<div class="evalbar" title="Tes chances de gain"><span id="evalbar-fill" style="height:50%"></span></div>{% endif %}
+      <div style="flex:1"><div id="board"></div></div>
+    </div>
+    <div class="board-controls">
+      <button class="btn btn-small" data-nav="first" title="Début (Origine)">⏮</button>
+      <button class="btn btn-small" data-nav="prev" title="Coup précédent (←)">◀</button>
+      <button class="btn btn-small" data-nav="next" title="Coup suivant (→)">▶</button>
+      <button class="btn btn-small" data-nav="last" title="Fin">⏭</button>
+      <button class="btn btn-small" data-nav="flip" title="Retourner l'échiquier">⇅</button>
+    </div>
+    {% if game.is_analyzed %}<div class="legend">Flèche colorée : coup joué · flèche verte : meilleur coup selon Stockfish</div>{% endif %}
+    <div class="card move-info" id="move-info"><span class="muted">Utilise les flèches du clavier ou clique sur un coup.</span></div>
+  </div>
+  <div>
+    {% if game.is_analyzed %}
+    <div class="card">
+      <h3>Courbe de tes chances de gain</h3>
+      <div id="wp-chart"></div>
+    </div>
+    {% endif %}
+    <div class="card">
+      <h3>Coups</h3>
+      <div class="movelist" id="movelist"></div>
+    </div>
+    {% if game.is_analyzed %}
+    <div class="card">
+      <h3>Bilan des coups</h3>
+      <div class="counts">
+        <span class="h"></span><span class="h">Toi</span><span class="h">Adversaire</span>
+        <span class="t-best">● Meilleurs</span><span class="n">{{ game.stats.counts.mine.best }}</span><span class="n">{{ game.stats.counts.opp.best }}</span>
+        <span class="t-good">● Bons</span><span class="n">{{ game.stats.counts.mine.good }}</span><span class="n">{{ game.stats.counts.opp.good }}</span>
+        <span class="t-inaccuracy">● Imprécisions</span><span class="n">{{ game.stats.counts.mine.inaccuracy }}</span><span class="n">{{ game.stats.counts.opp.inaccuracy }}</span>
+        <span class="t-mistake">● Erreurs</span><span class="n">{{ game.stats.counts.mine.mistake }}</span><span class="n">{{ game.stats.counts.opp.mistake }}</span>
+        <span class="t-blunder">● Gaffes</span><span class="n">{{ game.stats.counts.mine.blunder }}</span><span class="n">{{ game.stats.counts.opp.blunder }}</span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if game.is_analyzed %}
+<div class="section">
+  <h2>Moments clés</h2>
+  <div class="card">
+    {% for m in key_moments %}
+    <div class="moment" data-goto="{{ m.i|add:1 }}">
+      <span class="badge {% if m.mine %}badge-{% if m.cls == 'blunder' %}critique{% elif m.cls == 'mistake' %}important{% else %}conseil{% endif %}{% else %}badge-conseil{% endif %}">{% if m.mine %}Toi{% else %}Adversaire{% endif %}</span>
+      <div>
+        <div class="moment-title"><span class="t-{{ m.cls }}">{{ m.label }}{{ m.symbol }}</span> — {{ m.cls_label }}{% if m.best and m.best != m.san %} · meilleur : {{ m.best }}{% endif %}</div>
+        <ul>{% for line in m.explain %}<li>{{ line }}</li>{% endfor %}</ul>
+      </div>
+    </div>
+    {% empty %}
+    <p class="muted">Aucune erreur marquante dans cette partie. Bravo !</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h2>À retenir de cette partie</h2>
+  <div class="card">
+    <ul class="strengths">
+      {% if game.stats.missed_mates %}<li>Tu as laissé passer {{ game.stats.missed_mates }} occasion(s) de mat en 3 coups ou moins : avant chaque coup d'attaque, regarde tous les échecs.</li>{% endif %}
+      {% if game.stats.hanging %}<li>{{ game.stats.hanging }} coup(s) ont laissé du matériel en prise{% if game.stats.hanging_other %} (dont {{ game.stats.hanging_other }} fois une autre pièce que celle jouée : vérifie les menaces adverses){% endif %}.</li>{% endif %}
+      {% if game.stats.allowed_mates %}<li>{{ game.stats.allowed_mates }} coup(s) ont autorisé un mat forcé : regarde les échecs possibles de l'adversaire avant de jouer.</li>{% endif %}
+      {% if game.stats.unpunished %}<li>{{ game.stats.unpunished }} gaffe(s) adverse(s) non punie(s) : après chaque coup adverse, cherche ce qu'il laisse sans défense.</li>{% endif %}
+      {% if game.stats.stalemate_while_winning %}<li>Pat en position gagnante : contre un roi seul, vérifie à chaque coup qu'il lui reste une case.</li>{% endif %}
+      {% if game.stats.max_wp >= 85 and game.player_result != "win" %}<li>Tu as eu une position gagnante ({{ game.stats.max_wp|num:0 }} % de chances) sans la convertir : simplifie et échange quand tu mènes.</li>{% endif %}
+      {% if game.stats.first_own_blunder_move %}<li>Ta première gaffe arrive au coup {{ game.stats.first_own_blunder_move }} ({{ game.stats.first_own_blunder_wp|num:0 }} % de chances avant).</li>{% endif %}
+      {% if game.stats.castled_move %}<li>Roque au coup {{ game.stats.castled_move }}.</li>{% else %}<li>Tu n'as pas roqué dans cette partie.</li>{% endif %}
+      {% if game.stats.eval10 is not None %}<li>Après 10 coups, l'évaluation était de {{ game.stats.eval10|pawns }} (en pions, de ton point de vue).</li>{% endif %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{{ payload|json_script:"game-data" }}
+{% endblock %}
+{% block scripts %}<script>ChessCoach.initGame({{ start_ply|default:"null" }}); ChessCoach.initGameJob();</script>{% endblock %}

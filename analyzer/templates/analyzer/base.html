@@ -1,0 +1,26 @@
+{% load static %}<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Chess Coach{% endblock %} · Chess Coach</title>
+<link rel="stylesheet" href="{% static 'analyzer/app.css' %}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{% url 'analyzer:export_list' %}"><span class="brand-mark">♞</span> Chess Coach</a>
+  <nav>{% block nav %}{% endblock %}</nav>
+</header>
+<main class="page">
+  {% if messages %}
+  <div class="messages">
+    {% for m in messages %}<div class="msg msg-{{ m.tags }}">{{ m }}</div>{% endfor %}
+  </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot">Analyse Stockfish locale · données Chess.com via l'API publique · gaffe = perte ≥ 30 points de chances de gain</footer>
+<script src="{% static 'analyzer/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

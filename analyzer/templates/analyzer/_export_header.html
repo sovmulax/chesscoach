@@ -1,0 +1,54 @@
+{% load chess_extras %}
+<div class="row" style="align-items:flex-start">
+  <div>
+    <h1>{{ export.name }}</h1>
+    <p class="muted">
+      {% if export.is_chesscom %}<span class="badge badge-conseil">Chess.com</span>{% else %}<span class="badge">PGN</span>{% endif %}
+      Joueur analysé : <b>{{ export.player }}</b> · {{ progress.total }} parties
+      {% if export.is_chesscom and export.last_sync_at %} · synchro le {{ export.last_sync_at|date:"d/m/Y à H:i" }}{% endif %}
+    </p>
+  </div>
+  <div class="spacer"></div>
+  <div class="tabs" style="margin:0">
+    <a href="{% url 'analyzer:export_detail' export.pk %}" class="{% if tab == 'dashboard' %}active{% endif %}">Tableau de bord</a>
+    <a href="{% url 'analyzer:export_games' export.pk %}" class="{% if tab == 'games' %}active{% endif %}">Parties</a>
+  </div>
+</div>
+
+<div class="card" id="job-panel" data-status-url="{% url 'analyzer:export_status' export.pk %}"
+     data-running="{% if analysis_running or sync_running %}1{% endif %}">
+  <div class="row">
+    <div style="flex:1;min-width:240px">
+      <div class="row" style="gap:.5rem;margin-bottom:.4rem">
+        <b>Analyse Stockfish</b>
+        <span class="muted" id="job-count">{{ progress.done }} / {{ progress.total }} parties analysées</span>
+      </div>
+      <div class="progress"><span id="job-bar" style="width:{{ progress.pct }}%"></span></div>
+      <div class="muted" style="font-size:.88rem;margin-top:.35rem" id="job-message">{{ export.job_message }}</div>
+      {% if export.is_chesscom %}<div class="muted" style="font-size:.88rem" id="sync-message">{{ export.sync_message }}</div>{% endif %}
+    </div>
+    <div class="row" style="gap:.5rem">
+      {% if analysis_running %}
+        <form method="post" action="{% url 'analyzer:export_stop' export.pk %}" class="inline">{% csrf_token %}
+          <button class="btn">Arrêter l'analyse</button></form>
+      {% else %}
+        <form method="post" action="{% url 'analyzer:export_analyze' export.pk %}" class="row" style="gap:.5rem">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <select name="analysis_time" style="width:auto">
+            <option value="0.05" {% if export.analysis_time == 0.05 %}selected{% endif %}>Rapide (0,05 s)</option>
+            <option value="0.1" {% if export.analysis_time == 0.1 %}selected{% endif %}>Standard (0,1 s)</option>
+            <option value="0.3" {% if export.analysis_time == 0.3 %}selected{% endif %}>Précise (0,3 s)</option>
+          </select>
+          <button class="btn btn-primary" {% if not engine_ok %}disabled title="Stockfish introuvable"{% endif %}>
+            {% if progress.done == 0 %}Analyser l'export{% elif progress.done < progress.total %}Analyser les {{ progress.remaining }} parties restantes{% else %}Réanalyser{% endif %}
+          </button>
+          {% if progress.done == progress.total and progress.total %}<input type="hidden" name="reanalyze" value="1">{% endif %}
+        </form>
+      {% endif %}
+      {% if export.is_chesscom %}
+        <form method="post" action="{% url 'analyzer:export_sync' export.pk %}" class="inline">{% csrf_token %}
+          <button class="btn" {% if sync_running %}disabled{% endif %}>{% if sync_running %}Synchro en cours…{% else %}Synchroniser{% endif %}</button></form>
+      {% endif %}
+    </div>
+  </div>
+</div>

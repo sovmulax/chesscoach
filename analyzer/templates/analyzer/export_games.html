@@ -1,0 +1,39 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}Parties · {{ export.name }}{% endblock %}
+{% block content %}
+{% include "analyzer/_export_header.html" with tab="games" %}
+
+<div class="section">
+  <div class="filters">
+    <div><label for="f-q">Rechercher</label><input id="f-q" type="text" placeholder="adversaire, ouverture…"></div>
+    <div><label for="f-color">Couleur</label><select id="f-color"><option value="">Toutes</option><option value="w">Blancs</option><option value="b">Noirs</option></select></div>
+    <div><label for="f-result">Résultat</label><select id="f-result"><option value="">Tous</option><option value="win">Victoires</option><option value="draw">Nulles</option><option value="loss">Défaites</option></select></div>
+    <div><label for="f-status">Analyse</label><select id="f-status"><option value="">Toutes</option><option value="done">Analysées</option><option value="todo">Non analysées</option></select></div>
+    <div><label for="f-blunder">Gaffes</label><select id="f-blunder"><option value="">Peu importe</option><option value="1">Au moins une</option><option value="0">Aucune</option></select></div>
+    <div class="muted" id="f-count" style="padding-bottom:.45rem"></div>
+  </div>
+  <div class="card table-wrap">
+    <table class="data" id="games-table">
+      <tr><th>Date</th><th>Couleur</th><th>Adversaire</th><th>Résultat</th><th>Ouverture</th><th class="num">Coups</th><th class="num">Précision</th><th class="num">Gaffes</th><th></th></tr>
+      {% for g in games %}
+      <tr data-q="{{ g.opponent|lower }} {{ g.opening_name|lower }}" data-color="{{ g.player_color }}" data-result="{{ g.player_result }}"
+          data-status="{% if g.is_analyzed %}done{% else %}todo{% endif %}" data-blunders="{% if g.is_analyzed %}{{ g.stats.counts.mine.blunder }}{% endif %}">
+        <td class="muted" style="white-space:nowrap">{{ g.played_at|date:"d/m/Y H:i"|default:g.date }}</td>
+        <td>{{ g.player_color|color_label }}</td>
+        <td>{{ g.opponent }} <span class="faint">{{ g.opponent_elo|default:"" }}</span></td>
+        <td><span class="badge badge-{{ g.player_result }}">{{ g.player_result|result_label }}</span> <span class="faint" style="font-size:.82rem">{{ g.termination_kind|term_label }}</span></td>
+        <td>{{ g.opening_name }}</td>
+        <td class="num">{{ g.move_count }}</td>
+        <td class="num">{% if g.is_analyzed %}{{ g.stats.accuracy|num }}{% else %}—{% endif %}</td>
+        <td class="num">{% if g.is_analyzed %}{{ g.stats.counts.mine.blunder }}{% else %}—{% endif %}</td>
+        <td><a class="btn btn-small" href="{{ g.get_absolute_url }}">{% if g.is_analyzed %}Voir l'analyse{% else %}Analyser{% endif %}</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9" class="empty">Aucune partie.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>ChessCoach.initJobPanel(); ChessCoach.initGameFilters();</script>{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "analyzer/base.html" %}
+{% block title %}Mes exports{% endblock %}
+{% block content %}
+<h1>Mes exports de parties</h1>
+<p class="muted">Ajoute un fichier PGN ou relie ton compte Chess.com. Chaque export a son tableau de bord, son diagnostic et l'analyse partie par partie.</p>
+
+{% if not engine_ok %}
+<div class="notice" style="margin:1rem 0">Stockfish n'est pas détecté : l'import fonctionne, mais l'analyse moteur sera indisponible. Installe Stockfish puis renseigne <code>STOCKFISH_PATH</code> si besoin (voir le README).</div>
+{% endif %}
+
+<div class="grid grid-2" style="margin-top:1.25rem">
+  <div class="card">
+    <h2>Importer un fichier PGN</h2>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}
+      {% for field in form %}
+        {% if field.name == "analyze_now" %}
+          <div class="field"><label class="checkbox">{{ field }} {{ field.label }}</label></div>
+        {% else %}
+          <div class="field">{{ field.label_tag }}{{ field }}{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}{{ field.errors }}</div>
+        {% endif %}
+      {% endfor %}
+      <button class="btn btn-primary" type="submit">Importer</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Relier mon compte Chess.com</h2>
+    <p class="muted">Utilise l'API publique gratuite de Chess.com : tout ton historique est importé, puis les nouvelles parties sont récupérées automatiquement.</p>
+    <form method="post" action="{% url 'analyzer:chesscom_add' %}">{% csrf_token %}
+      <div class="field">{{ cc_form.username.label_tag }}{{ cc_form.username }}</div>
+      <div class="field"><label>{{ cc_form.time_classes.label }}</label>{{ cc_form.time_classes }}<div class="help">{{ cc_form.time_classes.help_text }}</div></div>
+      <div class="field">{{ cc_form.analysis_time.label_tag }}{{ cc_form.analysis_time }}</div>
+      <div class="field"><label class="checkbox">{{ cc_form.auto_analyze }} {{ cc_form.auto_analyze.label }}</label></div>
+      <button class="btn btn-primary" type="submit">Relier le compte</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Exports</h2>
+  {% if exports %}
+  <div class="card table-wrap">
+    <table class="data">
+      <tr><th>Nom</th><th>Type</th><th>Joueur</th><th class="num">Parties</th><th>Analyse</th><th>Ajouté le</th></tr>
+      {% for e in exports %}
+      <tr>
+        <td><a href="{{ e.get_absolute_url }}"><b>{{ e.name }}</b></a></td>
+        <td>{% if e.is_chesscom %}<span class="badge badge-conseil">Chess.com</span>{% else %}<span class="badge">PGN</span>{% endif %}</td>
+        <td>{{ e.player }}</td>
+        <td class="num">{{ e.n_games }}</td>
+        <td>
+          {% if e.flags.analysis_running %}<span class="badge badge-important">en cours</span>
+          {% elif e.flags.sync_running %}<span class="badge badge-important">synchro…</span>
+          {% elif e.n_games and e.n_done == e.n_games %}<span class="badge badge-done">complète</span>
+          {% else %}<span class="badge">{{ e.n_done }} / {{ e.n_games }}</span>{% endif %}
+        </td>
+        <td class="muted">{{ e.created_at|date:"d/m/Y H:i" }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% else %}
+  <div class="card empty">Aucun export pour l'instant.</div>
+  {% endif %}
+</div>
+{% endblock %}
