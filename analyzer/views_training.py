@@ -91,12 +91,15 @@ def training_play(request, theme):
         puzzle = Puzzle.objects.filter(pk=int(pid)).first()
     if puzzle is None:
         puzzle = training.next_puzzle(theme)
+    counts = training.theme_counts()
+    available = (Puzzle.objects.count() if theme == "mix" else len(training.failed_puzzle_ids()) if theme == "review"
+                 else counts.get(theme, 0))
     return render(request, "analyzer/training_play.html", {
         "theme": info, "puzzle": puzzle,
         "payload": puzzles.payload(puzzle) if puzzle else None,
         "pieces": _pieces(), "rating": training.current_rating(), "streak": training.streak(),
-        "available": training.queryset_for(theme).count(),
-        "themes_menu": [(k, v[0]) for k, v in puzzle_themes.THEMES.items() if training.queryset_for(k).exists()],
+        "available": available,
+        "themes_menu": [(k, v[0]) for k, v in puzzle_themes.THEMES.items() if counts.get(k)],
     })
 
 
@@ -115,13 +118,14 @@ def training_attempt(request, pk):
     puzzle = get_object_or_404(Puzzle, pk=pk)
     try:
         data = json.loads(request.body or "{}")
-    except ValueError:
-        return JsonResponse({"error": "JSON invalide"}, status=400)
-    seconds = data.get("seconds")
+        seconds = data.get("seconds")
+        seconds = min(3600.0, max(0.0, float(seconds))) if seconds is not None else None
+        mistakes = max(0, int(data.get("mistakes") or 0))
+    except (ValueError, TypeError, AttributeError):
+        return JsonResponse({"error": "données invalides"}, status=400)
     attempt = training.record_attempt(
-        puzzle, solved=bool(data.get("solved")), mistakes=int(data.get("mistakes") or 0),
-        used_hint=bool(data.get("used_hint")), seconds=float(seconds) if seconds is not None else None,
-        theme=str(data.get("theme") or ""))
+        puzzle, solved=bool(data.get("solved")), mistakes=mistakes,
+        used_hint=bool(data.get("used_hint")), seconds=seconds, theme=str(data.get("theme") or ""))
     return JsonResponse({
         "rating_before": attempt.rating_before, "rating_after": attempt.rating_after,
         "delta": attempt.rating_after - attempt.rating_before, "streak": training.streak(),
@@ -175,12 +179,13 @@ def training_sprint_result(request):
     try:
         data = json.loads(request.body or "{}")
         duration = int(data.get("duration"))
-    except (TypeError, ValueError):
+        score, mistakes = int(data.get("score") or 0), int(data.get("mistakes") or 0)
+        best_rating = int(data["best_rating"]) if data.get("best_rating") else None
+    except (TypeError, ValueError, AttributeError):
         return JsonResponse({"error": "données invalides"}, status=400)
     if duration not in training.SPRINT_DURATIONS:
         return JsonResponse({"error": "durée invalide"}, status=400)
-    run, record = training.record_sprint(duration, int(data.get("score") or 0), int(data.get("mistakes") or 0),
-                                         data.get("best_rating"))
+    run, record = training.record_sprint(duration, score, mistakes, best_rating)
     return JsonResponse({"score": run.score, "record": record, "best": training.sprint_best(duration)})
 
 
@@ -259,14 +264,16 @@ def reference_progress(request, slug):
         raise Http404
     try:
         data = json.loads(request.body or "{}")
-    except ValueError:
-        return JsonResponse({"error": "JSON invalide"}, status=400)
+        total = int(data["guess_total"]) if "guess_total" in data else None
+        correct = int(data.get("guess_correct") or 0)
+    except (ValueError, TypeError, AttributeError):
+        return JsonResponse({"error": "données invalides"}, status=400)
     study, _ = ReferenceStudy.objects.get_or_create(slug=slug)
     if data.get("completed"):
         study.completed_at = timezone.now()
-    if "guess_total" in data:
-        study.guess_total = int(data["guess_total"])
-        study.guess_correct = int(data.get("guess_correct") or 0)
+    # On garde le meilleur score du mode « devine le coup »
+    if total and (study.guess_score is None or 100 * correct / total >= study.guess_score):
+        study.guess_total, study.guess_correct = total, max(0, min(correct, total))
     study.save()
     return JsonResponse({"ok": True, "guess_score": study.guess_score,
                          "completed": bool(study.completed_at)})

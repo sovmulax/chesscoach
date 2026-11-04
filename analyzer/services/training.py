@@ -10,6 +10,7 @@ from pathlib import Path
 
 import chess
 from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from ..models import Export, Game, Puzzle, PuzzleAttempt, PuzzleScan, PuzzleSprint
@@ -286,9 +287,15 @@ def load_bank(path=BANK_FILE):
     return Puzzle.objects.filter(source=Puzzle.SOURCE_BANK).count() - before
 
 
+_bank_checked = False
+
+
 def ensure_bank():
-    if not Puzzle.objects.filter(source=Puzzle.SOURCE_BANK).exists():
+    """Charge la banque intégrée (et ses nouveautés après une mise à jour), une fois par processus."""
+    global _bank_checked
+    if not _bank_checked or not Puzzle.objects.filter(source=Puzzle.SOURCE_BANK).exists():
         load_bank()
+        _bank_checked = True
 
 
 def import_lichess_csv(stream, limit=None, themes=None, min_rating=0, max_rating=4000, min_popularity=-100):
@@ -326,17 +333,10 @@ def import_lichess_csv(stream, limit=None, themes=None, min_rating=0, max_rating
 # ---------------------------------------------------------------------------
 def candidate_games(export, limit_games=150):
     """Parties analysées pas encore parcourues (ou réanalysées depuis), les plus récentes d'abord."""
-    games = (export.games.filter(status=Game.STATUS_DONE).exclude(analysis=None)
-             .select_related("puzzle_scan").order_by("-played_at", "-id"))
-    out = []
-    for g in games:
-        scan = getattr(g, "puzzle_scan", None)
-        if scan and g.analyzed_at and scan.scanned_at >= g.analyzed_at:
-            continue
-        out.append(g)
-        if len(out) >= limit_games:
-            break
-    return out
+    todo = (export.games.filter(status=Game.STATUS_DONE).exclude(analysis=None)
+            .filter(Q(puzzle_scan__isnull=True) | Q(puzzle_scan__scanned_at__lt=F("analyzed_at")))
+            .order_by("-played_at", "-id"))
+    return list(todo[:limit_games])
 
 
 def game_candidates(game):

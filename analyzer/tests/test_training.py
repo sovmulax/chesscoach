@@ -224,3 +224,34 @@ class SprintAndDailyTests(TestCase):
         self.assertEqual(post({"duration": 42, "score": 1}).status_code, 400)
         self.assertEqual(PuzzleAttempt.objects.count(), 0)  # la course ne touche pas au classement
         self.assertEqual(self.client.get("/exercices/course/").status_code, 200)
+
+
+class ApiValidationTests(TestCase):
+    def test_bad_payloads_are_rejected(self):
+        p = make("bad", FORK)
+        post = lambda url, body: self.client.post(url, data=body, content_type="application/json")
+        self.assertEqual(post(f"/exercices/api/{p.pk}/tentative/", '{"seconds": "abc"}').status_code, 400)
+        self.assertEqual(post(f"/exercices/api/{p.pk}/tentative/", "[1, 2]").status_code, 400)
+        self.assertEqual(post("/exercices/api/course/resultat/", '{"duration": 180, "score": "x"}').status_code, 400)
+        slug = references.catalogue()[0]["slug"]
+        self.assertEqual(post(f"/references/{slug}/progression/", '{"guess_total": "x"}').status_code, 400)
+        self.assertEqual(PuzzleAttempt.objects.count(), 0)
+
+
+class CandidateGamesTests(TestCase):
+    def test_scanned_games_are_skipped_until_reanalysed(self):
+        import datetime as dt
+
+        from django.utils import timezone
+
+        from analyzer.services import jobs, pgn_import
+        from analyzer.tests.test_core import SAMPLE_PGN, SCHOLAR_PGN, fake_plies
+
+        export, _, _ = pgn_import.import_pgn_text(SAMPLE_PGN.encode())
+        game = export.games.get(black="moi")
+        jobs.save_analysis(game, fake_plies(SCHOLAR_PGN, [30, 30, 0, 20, 30, 30, 9990], mates={6: 1}), 0.01)
+        self.assertEqual([g.pk for g in training.candidate_games(export)], [game.pk])
+        training.save_game_puzzles(game, [])
+        self.assertEqual(training.candidate_games(export), [])
+        export.games.filter(pk=game.pk).update(analyzed_at=timezone.now() + dt.timedelta(minutes=1))
+        self.assertEqual([g.pk for g in training.candidate_games(export)], [game.pk])
