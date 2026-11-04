@@ -66,15 +66,21 @@ def build(summary):
         f["finding"] = _fr(f["finding"])
     strengths = [_fr(s) for s in strengths]
     findings.sort(key=lambda f: LEVELS[f["level"]])
-    plan, seen = [], set()
+    plan, seen = [], {}
     for f in findings:
         for t in f["training"]:
             if t not in seen:
-                seen.add(t)
-                plan.append({"id": t, "title": TRAINING[t][0], "text": TRAINING[t][1]})
+                seen[t] = {"id": t, "title": TRAINING[t][0], "text": TRAINING[t][1], "because": []}
+                plan.append(seen[t])
+            # Lien vers les constats qui justifient cet exercice (affichage uniquement)
+            seen[t]["because"].append({"id": f["id"], "title": f["title"], "level": f["level"]})
     if "review" not in seen:
-        plan.append({"id": "review", "title": TRAINING["review"][0], "text": TRAINING["review"][1]})
-    return {"findings": findings, "strengths": strengths, "plan": plan[:7], "fundamentals": FUNDAMENTALS}
+        plan.append({"id": "review", "title": TRAINING["review"][0], "text": TRAINING["review"][1], "because": []})
+    for f in findings:
+        f["training_items"] = [{"id": t, "title": TRAINING[t][0]} for t in f["training"]]
+    counts = {lvl: sum(1 for f in findings if f["level"] == lvl) for lvl in LEVELS}
+    return {"findings": findings, "strengths": strengths, "plan": plan[:7], "fundamentals": FUNDAMENTALS,
+            "counts": counts}
 
 
 def _engine_rules(eng, findings, strengths):

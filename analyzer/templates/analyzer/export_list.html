@@ -1,65 +1,122 @@
 {% extends "analyzer/base.html" %}
-{% block title %}Mes exports{% endblock %}
+{% load chess_extras %}
+{% block title %}Mes analyses{% endblock %}
+{% block crumbs %}<span class="current">Mes analyses</span>{% endblock %}
 {% block content %}
-<h1>Mes exports de parties</h1>
-<p class="muted">Ajoute un fichier PGN ou relie ton compte Chess.com. Chaque export a son tableau de bord, son diagnostic et l'analyse partie par partie.</p>
 
-{% if not engine_ok %}
-<div class="notice" style="margin:1rem 0">Stockfish n'est pas détecté : l'import fonctionne, mais l'analyse moteur sera indisponible. Installe Stockfish puis renseigne <code>STOCKFISH_PATH</code> si besoin (voir le README).</div>
-{% endif %}
-
-<div class="grid grid-2" style="margin-top:1.25rem">
-  <div class="card">
-    <h2>Importer un fichier PGN</h2>
-    <form method="post" enctype="multipart/form-data">{% csrf_token %}
-      {% for field in form %}
-        {% if field.name == "analyze_now" %}
-          <div class="field"><label class="checkbox">{{ field }} {{ field.label }}</label></div>
-        {% else %}
-          <div class="field">{{ field.label_tag }}{{ field }}{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}{{ field.errors }}</div>
-        {% endif %}
-      {% endfor %}
-      <button class="btn btn-primary" type="submit">Importer</button>
-    </form>
+<section class="hero">
+  <div>
+    <span class="eyebrow">{% icon "cpu" %} Coach d'échecs open source</span>
+    {% if exports %}
+    <h1>Bon retour&nbsp;! Prêt à <em>progresser</em>&nbsp;?</h1>
+    <p class="hero-lead">Ouvre une de tes analyses ci-dessous ou ajoute de nouvelles parties. Chaque import a son diagnostic, son plan d'entraînement et l'analyse coup par coup.</p>
+    {% else %}
+    <h1>Comprends tes parties.<br><em>Corrige tes erreurs.</em></h1>
+    <p class="hero-lead">Importe tes parties (fichier PGN ou compte Chess.com) : Stockfish les analyse sur ta machine, puis Chess Coach te montre où tu perds des points et comment t'entraîner.</p>
+    {% endif %}
+    <ul class="hero-points">
+      <li>{% icon "check-circle" %}<span><b>Diagnostic personnalisé</b> : tes priorités, chiffrées, avec des exemples tirés de tes parties.</span></li>
+      <li>{% icon "check-circle" %}<span><b>Plan d'entraînement</b> à cocher au fil de la semaine.</span></li>
+      <li>{% icon "check-circle" %}<span><b>Analyse coup par coup</b> sur un échiquier interactif, avec le meilleur coup et l'explication.</span></li>
+      <li>{% icon "shield" %}<span>100 % local, gratuit et open source : tes parties restent chez toi.</span></li>
+    </ul>
   </div>
-  <div class="card">
-    <h2>Relier mon compte Chess.com</h2>
-    <p class="muted">Utilise l'API publique gratuite de Chess.com : tout ton historique est importé, puis les nouvelles parties sont récupérées automatiquement.</p>
-    <form method="post" action="{% url 'analyzer:chesscom_add' %}">{% csrf_token %}
-      <div class="field">{{ cc_form.username.label_tag }}{{ cc_form.username }}</div>
-      <div class="field"><label>{{ cc_form.time_classes.label }}</label>{{ cc_form.time_classes }}<div class="help">{{ cc_form.time_classes.help_text }}</div></div>
-      <div class="field">{{ cc_form.analysis_time.label_tag }}{{ cc_form.analysis_time }}</div>
-      <div class="field"><label class="checkbox">{{ cc_form.auto_analyze }} {{ cc_form.auto_analyze.label }}</label></div>
-      <button class="btn btn-primary" type="submit">Relier le compte</button>
-    </form>
-  </div>
-</div>
 
-<div class="section">
-  <h2>Exports</h2>
+  <div class="card add-card" id="ajouter">
+    <div class="segmented" role="tablist" aria-label="Source des parties" data-tabs="add">
+      <button type="button" role="tab" aria-selected="true" data-tab="pgn">{% icon "file" %} Fichier PGN</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="chesscom">{% icon "link" %} Compte Chess.com</button>
+    </div>
+
+    <div class="add-body" role="tabpanel" data-panel="pgn">
+      {% if not engine_ok %}
+      <div class="notice small" style="margin-bottom:1rem">{% icon "alert" %}<div>Stockfish n'est pas détecté : l'import fonctionne, mais l'analyse moteur sera indisponible. Installe Stockfish puis renseigne <code>STOCKFISH_PATH</code> si besoin (voir le README).</div></div>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data">{% csrf_token %}
+        <div class="field">
+          <label class="dropzone" data-dropzone>
+            {% icon "upload" %}
+            <span class="dz-text">Glisse ton fichier <b>.pgn</b> ici ou <u>parcours</u></span>
+            <span class="dz-file" hidden></span>
+            <span class="faint small">{{ form.pgn_file.help_text }}</span>
+            {{ form.pgn_file }}
+          </label>
+          {{ form.pgn_file.errors }}
+        </div>
+        <div class="field"><label class="checkbox">{{ form.analyze_now }} {{ form.analyze_now.label }}</label></div>
+        <details>
+          <summary>Options (nom, pseudo, précision)</summary>
+          <div class="field">{{ form.name.label_tag }}{{ form.name }}{{ form.name.errors }}</div>
+          <div class="field">{{ form.player.label_tag }}{{ form.player }}<div class="help">{{ form.player.help_text }}</div>{{ form.player.errors }}</div>
+          <div class="field">{{ form.analysis_time.label_tag }}{{ form.analysis_time }}</div>
+        </details>
+        <button class="btn btn-primary btn-block" type="submit">{% icon "upload" %} Importer et analyser</button>
+      </form>
+    </div>
+
+    <div class="add-body" role="tabpanel" data-panel="chesscom" hidden>
+      <p class="muted small">L'API publique gratuite de Chess.com (sans mot de passe) : tout ton historique est importé, puis les nouvelles parties sont récupérées automatiquement.</p>
+      <form method="post" action="{% url 'analyzer:chesscom_add' %}">{% csrf_token %}
+        <div class="field">{{ cc_form.username.label_tag }}{{ cc_form.username }}</div>
+        <div class="field"><label>{{ cc_form.time_classes.label }}</label>{{ cc_form.time_classes }}<div class="help">{{ cc_form.time_classes.help_text }}</div></div>
+        <div class="field"><label class="checkbox">{{ cc_form.auto_analyze }} {{ cc_form.auto_analyze.label }}</label></div>
+        <details>
+          <summary>Précision de l'analyse</summary>
+          <div class="field">{{ cc_form.analysis_time }}</div>
+        </details>
+        <button class="btn btn-primary btn-block" type="submit">{% icon "link" %} Relier le compte</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>{% icon "list" %} Mes analyses</h2>
+    {% if exports %}<span class="badge">{{ exports|length }}</span>{% endif %}
+  </div>
   {% if exports %}
-  <div class="card table-wrap">
-    <table class="data">
-      <tr><th>Nom</th><th>Type</th><th>Joueur</th><th class="num">Parties</th><th>Analyse</th><th>Ajouté le</th></tr>
-      {% for e in exports %}
-      <tr>
-        <td><a href="{{ e.get_absolute_url }}"><b>{{ e.name }}</b></a></td>
-        <td>{% if e.is_chesscom %}<span class="badge badge-conseil">Chess.com</span>{% else %}<span class="badge">PGN</span>{% endif %}</td>
-        <td>{{ e.player }}</td>
-        <td class="num">{{ e.n_games }}</td>
-        <td>
-          {% if e.flags.analysis_running %}<span class="badge badge-important">en cours</span>
-          {% elif e.flags.sync_running %}<span class="badge badge-important">synchro…</span>
-          {% elif e.n_games and e.n_done == e.n_games %}<span class="badge badge-done">complète</span>
-          {% else %}<span class="badge">{{ e.n_done }} / {{ e.n_games }}</span>{% endif %}
-        </td>
-        <td class="muted">{{ e.created_at|date:"d/m/Y H:i" }}</td>
-      </tr>
-      {% endfor %}
-    </table>
+  <div class="export-cards">
+    {% for e in exports %}
+    <a class="card export-card" href="{{ e.get_absolute_url }}" style="animation-delay: {{ forloop.counter0 }}0ms">
+      <div class="ec-head">
+        <span class="avatar" aria-hidden="true">{{ e.player|first }}</span>
+        <div class="ec-title">
+          <h3>{{ e.name }}</h3>
+          <div class="muted small">{{ e.player }} · {% if e.is_chesscom %}Chess.com{% else %}fichier PGN{% endif %}</div>
+        </div>
+        <span class="spacer"></span>
+        {% if e.flags.analysis_running %}<span class="badge badge-important"><span class="dot-live"></span> analyse</span>
+        {% elif e.flags.sync_running %}<span class="badge badge-important"><span class="dot-live"></span> synchro</span>
+        {% elif e.n_games and e.n_done == e.n_games %}<span class="badge badge-done">{% icon "check" %} analysé</span>
+        {% else %}<span class="badge">à analyser</span>{% endif %}
+      </div>
+      {% with r=e.summary.basic.results %}
+      {% if r and r.n %}
+      <div>
+        <div class="row row-tight small" style="justify-content:space-between;margin-bottom:.35rem">
+          <span><b class="v-win">{{ r.win }}</b> V · <b class="v-draw">{{ r.draw }}</b> N · <b class="v-loss">{{ r.loss }}</b> D</span>
+          <span class="muted">score <b>{{ r.score|num }} %</b></span>
+        </div>
+        <div class="wdl"><span class="w" style="flex:{{ r.win }}"></span><span class="d" style="flex:{{ r.draw }}"></span><span class="l" style="flex:{{ r.loss }}"></span></div>
+      </div>
+      {% endif %}
+      {% endwith %}
+      <div>
+        <div class="ec-meta"><span>{{ e.n_done }} / {{ e.n_games }} parties analysées</span><span>{{ e.n_done|pct_of:e.n_games|num:0 }} %</span></div>
+        <div class="progress" style="margin-top:.35rem"><span style="width:{{ e.n_done|pct_of:e.n_games|css_num }}%"></span></div>
+      </div>
+      <div class="ec-meta"><span>{% icon "calendar" %} {{ e.created_at|date:"d/m/Y" }}</span><span class="v-accent">Ouvrir {% icon "arrow-right" %}</span></div>
+    </a>
+    {% endfor %}
   </div>
   {% else %}
-  <div class="card empty">Aucun export pour l'instant.</div>
+  <div class="card empty">
+    {% icon "swords" %}
+    <p><b>Aucune analyse pour l'instant.</b></p>
+    <p class="small">Importe un fichier PGN ou relie ton compte Chess.com ci-dessus pour commencer.</p>
+  </div>
   {% endif %}
-</div>
+</section>
 {% endblock %}
+{% block scripts %}<script>ChessCoach.initHome();</script>{% endblock %}

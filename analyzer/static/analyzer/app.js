@@ -1,18 +1,147 @@
-/* Chess Coach — JavaScript sans dépendance : échiquier SVG, courbes, suivi des analyses. */
+/* Chess Coach — JavaScript sans dépendance externe.
+   Apparence (thèmes), onglets, graphiques interactifs, échiquier animé, suivi des analyses. */
 (function () {
   "use strict";
   const NS = "http://www.w3.org/2000/svg";
+  const root = document.documentElement;
   const CLS_COLORS = {
     best: "var(--c-best)", good: "var(--c-good)", inaccuracy: "var(--c-inaccuracy)",
     mistake: "var(--c-mistake)", blunder: "var(--c-blunder)",
   };
+  const CLS_GLYPH = { best: "★", good: "✓", inaccuracy: "?!", mistake: "?", blunder: "??" };
+  const ERRORS = ["inaccuracy", "mistake", "blunder"];
+  const EASE = "cubic-bezier(.2,.7,.2,1)";
 
-  function $(sel, root) { return (root || document).querySelector(sel); }
-  function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+  function $(sel, ctx) { return (ctx || document).querySelector(sel); }
+  function $all(sel, ctx) { return Array.from((ctx || document).querySelectorAll(sel)); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
   function fmt(n, d) { return n == null ? "—" : Number(n).toFixed(d == null ? 0 : d).replace(".", ","); }
+  const store = {
+    get(k, d) { try { const v = window.localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* stockage indisponible */ } },
+  };
+  function motionOK() {
+    return root.getAttribute("data-motion") !== "off" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+  function icon(name) { return `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`; }
 
-  // ---------------------------------------------------------------- suivi des tâches
+  // ================================================================ apparence
+  function effectiveDark() {
+    const m = root.getAttribute("data-mode");
+    if (m === "dark") return true;
+    if (m === "light") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+
+  function initAppearance() {
+    const drawer = $("#appearance"), backdrop = $(".drawer-backdrop");
+    let lastFocus = null;
+    function sync() {
+      $all("[data-set]").forEach(b => b.setAttribute("aria-checked", String(root.getAttribute("data-" + b.dataset.set) === b.dataset.value)));
+      $all("[data-set-toggle]").forEach(i => { i.checked = root.getAttribute("data-" + i.dataset.setToggle) !== "off"; });
+    }
+    function set(key, value) {
+      root.setAttribute("data-" + key, value);
+      store.set("cc-" + key, value);
+      sync();
+      document.dispatchEvent(new CustomEvent("cc:theme", { detail: { key, value } }));
+    }
+    function open() {
+      lastFocus = document.activeElement;
+      drawer.hidden = false; backdrop.hidden = false;
+      const first = $("[aria-checked='true']", drawer) || $("button", drawer);
+      if (first) first.focus();
+    }
+    function close() {
+      drawer.hidden = true; backdrop.hidden = true;
+      if (lastFocus) lastFocus.focus();
+    }
+    $all("[data-open-appearance]").forEach(b => b.addEventListener("click", open));
+    $all("[data-close-appearance]").forEach(b => b.addEventListener("click", close));
+    document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !drawer.hidden) close(); });
+    $all("[data-set]").forEach(b => b.addEventListener("click", () => set(b.dataset.set, b.dataset.value)));
+    $all("[data-set-toggle]").forEach(i => i.addEventListener("change", () => set(i.dataset.setToggle, i.checked ? "on" : "off")));
+    $all("[data-mode-toggle]").forEach(b => b.addEventListener("click", () => set("mode", effectiveDark() ? "light" : "dark")));
+    sync();
+  }
+
+  // ================================================================ éléments communs
+  function initCommon() {
+    $all(".toast").forEach(t => {
+      const btn = $("[data-dismiss]", t);
+      const hide = () => { t.style.transition = "opacity .3s, transform .3s"; t.style.opacity = "0"; t.style.transform = "translateY(-4px)"; setTimeout(() => t.remove(), 300); };
+      if (btn) btn.addEventListener("click", hide);
+      if (!t.classList.contains("toast-error")) setTimeout(hide, 8000);
+    });
+    $all("[data-open-dialog]").forEach(b => b.addEventListener("click", () => {
+      const d = document.getElementById(b.dataset.openDialog);
+      if (d && d.showModal) d.showModal();
+    }));
+    $all("dialog").forEach(d => {
+      d.addEventListener("click", ev => { if (ev.target === d) d.close(); });
+      $all("[data-close-dialog]", d).forEach(b => b.addEventListener("click", () => d.close()));
+    });
+  }
+
+  // ================================================================ onglets
+  function tabs(name, opts) {
+    opts = opts || {};
+    const bar = $(`[data-tabs="${name}"]`);
+    if (!bar) return null;
+    const scope = opts.scope || document;
+    const tabEls = $all("[data-tab]", bar);
+    const ids = tabEls.map(t => t.dataset.tab);
+    const panels = $all("[data-panel]", scope).filter(p => ids.includes(p.dataset.panel));
+    let current = null;
+    function activate(id, how) {
+      if (!ids.includes(id)) id = ids[0];
+      current = id;
+      tabEls.forEach(t => {
+        const on = t.dataset.tab === id;
+        t.setAttribute("aria-selected", String(on));
+        t.classList.toggle("active", on);
+        t.tabIndex = on ? 0 : -1;
+      });
+      panels.forEach(p => {
+        const on = p.dataset.panel === id;
+        if (opts.classMode) p.classList.toggle("is-active", on); else p.hidden = !on;
+      });
+      if (opts.onChange) opts.onChange(id, how);
+    }
+    tabEls.forEach(t => t.addEventListener("click", ev => {
+      ev.preventDefault();
+      activate(t.dataset.tab, "click");
+      if (opts.hash) history.replaceState(null, "", "#" + t.dataset.tab);
+    }));
+    bar.addEventListener("keydown", ev => {
+      if (ev.key !== "ArrowRight" && ev.key !== "ArrowLeft") return;
+      const i = ids.indexOf(current), j = (i + (ev.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length;
+      tabEls[j].focus(); tabEls[j].click(); ev.preventDefault();
+    });
+    return { activate, ids, get current() { return current; } };
+  }
+
+  // ================================================================ accueil
+  function initHome() {
+    const card = $(".add-card");
+    if (card) tabs("add", { scope: card });
+    $all("[data-dropzone]").forEach(dz => {
+      const input = $("input[type=file]", dz), label = $(".dz-file", dz), text = $(".dz-text", dz);
+      function show() {
+        const f = input.files && input.files[0];
+        if (f) { label.textContent = f.name; label.hidden = false; text.hidden = true; }
+      }
+      input.addEventListener("change", show);
+      ["dragenter", "dragover"].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add("dragover"); }));
+      ["dragleave", "drop"].forEach(e => dz.addEventListener(e, () => dz.classList.remove("dragover")));
+      dz.addEventListener("drop", ev => {
+        ev.preventDefault();
+        if (ev.dataTransfer && ev.dataTransfer.files.length) { input.files = ev.dataTransfer.files; show(); }
+      });
+    });
+  }
+
+  // ================================================================ suivi des tâches
   function poll(url, onData, intervalMs) {
     let stopped = false;
     async function tick() {
@@ -31,9 +160,9 @@
     if (!panel || !panel.dataset.running) return;
     let lastDone = null;
     poll(panel.dataset.statusUrl, function (d) {
-      $("#job-bar").style.width = d.pct + "%";
-      $("#job-count").textContent = d.done + " / " + d.total + " parties analysées";
-      if (d.message) $("#job-message").textContent = d.message;
+      const bar = $("#job-bar"); if (bar) bar.style.width = d.pct + "%";
+      const cnt = $("#job-count"); if (cnt) cnt.textContent = d.done + " / " + d.total + " parties analysées";
+      const msg = $("#job-message"); if (msg && d.message) { msg.textContent = d.message; msg.hidden = false; }
       const sm = $("#sync-message"); if (sm && d.sync_message) sm.textContent = d.sync_message;
       if (!d.analysis_running && !d.sync_running) { location.reload(); return false; }
       // Recharge de temps en temps pour rafraîchir le tableau de bord pendant l'analyse
@@ -50,10 +179,11 @@
     }, 2000);
   }
 
-  // ---------------------------------------------------------------- filtres de la liste
+  // ================================================================ liste des parties
   function initGameFilters() {
-    const rows = $all("#games-table tr[data-q]");
+    const rows = $all("#games-table tbody tr[data-q]");
     const q = $("#f-q"), color = $("#f-color"), result = $("#f-result"), status = $("#f-status"), bl = $("#f-blunder");
+    if (!q) return;
     function apply() {
       const text = q.value.trim().toLowerCase();
       let n = 0;
@@ -66,55 +196,181 @@
           const b = r.dataset.blunders === "" ? null : parseInt(r.dataset.blunders, 10);
           ok = b !== null && (bl.value === "1" ? b > 0 : b === 0);
         }
-        r.style.display = ok ? "" : "none";
+        r.hidden = !ok;
         if (ok) n++;
       });
-      $("#f-count").textContent = n + " partie(s)";
+      $("#f-count").textContent = n + " partie" + (n > 1 ? "s" : "");
+      const empty = $("#f-empty"); if (empty) empty.hidden = n > 0 || !rows.length;
     }
     [q, color, result, status, bl].forEach(el => el.addEventListener("input", apply));
+    rows.forEach(r => r.addEventListener("click", ev => {
+      if (ev.target.closest("a, button") || window.getSelection().toString()) return;
+      location.href = r.dataset.href;
+    }));
     apply();
   }
 
-  // ---------------------------------------------------------------- courbes
+  // ================================================================ tableau de bord
+  function initDashboard() {
+    const container = $('[data-tab-panels="dash"]');
+    if (!container) return;
+    container.classList.add("js-tabs");
+    const subnav = $(".subnav");
+    const t = tabs("dash", {
+      scope: container, classMode: true, hash: true,
+      onChange(id, how) {
+        if (how === "click" && subnav) {
+          const top = subnav.getBoundingClientRect().top + window.scrollY - 58;
+          if (window.scrollY > top) window.scrollTo({ top, behavior: motionOK() ? "smooth" : "auto" });
+        }
+        if (id === "progression") window.dispatchEvent(new Event("resize"));
+      },
+    });
+    const fromHash = () => location.hash.slice(1);
+    t.activate(t.ids.includes(fromHash()) ? fromHash() : t.ids[0], "load");
+    window.addEventListener("hashchange", () => { if (t.ids.includes(fromHash())) t.activate(fromHash(), "hash"); });
+    // Le filtre de cadence garde l'onglet ouvert
+    $all('.segmented a[href^="?"]').forEach(a => a.addEventListener("click", () => {
+      a.setAttribute("href", a.getAttribute("href").split("#")[0] + "#" + t.current);
+    }));
+    initPlan();
+    initEloChart();
+    // Liens « Entraînement associé » -> élément du plan
+    $all("[data-jump-plan]").forEach(a => a.addEventListener("click", ev => {
+      const target = document.getElementById(a.getAttribute("href").slice(1));
+      if (!target) return;
+      ev.preventDefault();
+      target.scrollIntoView({ behavior: motionOK() ? "smooth" : "auto", block: "center" });
+      target.animate && motionOK() && target.animate(
+        [{ boxShadow: "0 0 0 0 transparent" }, { boxShadow: "0 0 0 4px var(--accent)" }, { boxShadow: "0 0 0 0 transparent" }],
+        { duration: 1400, easing: "ease-in-out" });
+    }));
+  }
+
+  function initPlan() {
+    const box = $("[data-plan]");
+    if (!box) return;
+    const key = "cc-plan-" + box.dataset.plan;
+    const items = $all("[data-plan-item]", box);
+    let done = [];
+    try { done = JSON.parse(store.get(key, "[]")) || []; } catch (e) { done = []; }
+    function update() {
+      const n = items.filter(i => i.checked).length;
+      $("[data-plan-count]", box).textContent = n + " / " + items.length;
+      $("[data-plan-bar]", box).style.width = (items.length ? 100 * n / items.length : 0) + "%";
+    }
+    items.forEach(i => {
+      i.checked = done.includes(i.dataset.planItem);
+      i.addEventListener("change", () => {
+        store.set(key, JSON.stringify(items.filter(x => x.checked).map(x => x.dataset.planItem)));
+        update();
+      });
+    });
+    const reset = $("[data-plan-reset]", box);
+    if (reset) reset.addEventListener("click", () => { items.forEach(i => { i.checked = false; }); store.set(key, "[]"); update(); });
+    update();
+  }
+
+  // ================================================================ graphiques
+  let chartUid = 0;
   function lineChart(container, values, opts) {
     opts = opts || {};
-    const W = Math.max(300, Math.round(container.clientWidth || 640)), H = opts.height || 170, P = { l: 36, r: 10, t: 10, b: 22 };
     const n = values.length;
     if (!n) return null;
+    const uid = "c" + (++chartUid);
     const min = opts.min != null ? opts.min : Math.min.apply(null, values);
     const max = opts.max != null ? opts.max : Math.max.apply(null, values);
     const span = max - min || 1;
-    const x = i => P.l + (n === 1 ? 0 : i * (W - P.l - P.r) / (n - 1));
-    const y = v => P.t + (1 - (v - min) / span) * (H - P.t - P.b);
-    const pts = values.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1));
-    let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || "")}">`;
-    (opts.gridValues || [min, (min + max) / 2, max]).forEach(g => {
-      s += `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y(g)}" y2="${y(g)}"/>`;
-      s += `<text x="${P.l - 6}" y="${y(g) + 4}" text-anchor="end">${esc(opts.gridFormat ? opts.gridFormat(g) : Math.round(g))}</text>`;
-    });
-    if (opts.area) s += `<polygon class="area" points="${x(0)},${y(min)} ${pts.join(" ")} ${x(n - 1)},${y(min)}"/>`;
-    s += `<polyline class="line" points="${pts.join(" ")}"/>`;
-    (opts.markers || []).forEach(m => {
-      s += `<circle cx="${x(m.i)}" cy="${y(values[m.i])}" r="4.5" fill="${m.color}" stroke="var(--surface)" stroke-width="1.5"><title>${esc(m.title || "")}</title></circle>`;
-    });
-    if (opts.xLabels) opts.xLabels.forEach(l => { s += `<text x="${x(l.i)}" y="${H - 6}" text-anchor="${l.anchor || "middle"}">${esc(l.text)}</text>`; });
-    s += `<line class="cursor" id="${opts.cursorId || "chart-cursor"}" x1="-10" x2="-10" y1="${P.t}" y2="${H - P.b}"/>`;
-    s += `<rect x="${P.l}" y="0" width="${W - P.l - P.r}" height="${H}" fill="transparent" class="hit"/>`;
-    s += "</svg>";
-    container.innerHTML = s;
-    const svg = container.querySelector("svg");
-    return {
-      svg, x,
-      indexFromEvent(ev) {
-        const r = svg.getBoundingClientRect();
-        const px = (ev.clientX - r.left) * W / r.width;
-        return Math.max(0, Math.min(n - 1, Math.round((px - P.l) * (n - 1) / (W - P.l - P.r))));
-      },
-      setCursor(i) {
-        const c = svg.querySelector(".cursor");
-        c.setAttribute("x1", x(i)); c.setAttribute("x2", x(i));
-      },
-    };
+    let W = 0, H = opts.height || 180, svg = null, cursorIdx = null, x = null, y = null;
+    const P = { l: 38, r: 12, t: 12, b: opts.xLabels ? 24 : 10 };
+    const tip = document.createElement("div");
+    tip.className = "chart-tip";
+
+    function draw() {
+      const w = Math.round(container.clientWidth);
+      if (!w || w === W) return;
+      W = w;
+      x = i => P.l + (n === 1 ? 0 : i * (W - P.l - P.r) / (n - 1));
+      y = v => P.t + (1 - (v - min) / span) * (H - P.t - P.b);
+      const pts = values.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+      let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(opts.label || "")}">`;
+      s += `<defs><linearGradient id="${uid}-g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".28"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient>`;
+      if (opts.baseline != null) {
+        const yb = y(opts.baseline);
+        s += `<clipPath id="${uid}-up"><rect x="0" y="0" width="${W}" height="${yb}"/></clipPath><clipPath id="${uid}-dn"><rect x="0" y="${yb}" width="${W}" height="${H - yb}"/></clipPath>`;
+      }
+      s += "</defs>";
+      (opts.gridValues || [min, (min + max) / 2, max]).forEach(g => {
+        s += `<line class="${g === opts.baseline ? "mid-line" : "grid-line"}" x1="${P.l}" x2="${W - P.r}" y1="${y(g)}" y2="${y(g)}"/>`;
+        s += `<text x="${P.l - 7}" y="${y(g) + 3.5}" text-anchor="end">${esc(opts.gridFormat ? opts.gridFormat(g) : Math.round(g))}</text>`;
+      });
+      if (opts.baseline != null) {
+        const yb = y(opts.baseline);
+        const poly = `${x(0)},${yb} ${pts} ${x(n - 1)},${yb}`;
+        s += `<polygon class="area-up" clip-path="url(#${uid}-up)" points="${poly}"/><polygon class="area-down" clip-path="url(#${uid}-dn)" points="${poly}"/>`;
+      } else {
+        s += `<polygon fill="url(#${uid}-g)" points="${x(0)},${y(min)} ${pts} ${x(n - 1)},${y(min)}"/>`;
+      }
+      s += `<polyline class="line" points="${pts}" ${opts.lineColor ? `style="stroke:${opts.lineColor}"` : ""}/>`;
+      s += `<line class="hover-line" x1="0" x2="0" y1="${P.t}" y2="${H - P.b}" visibility="hidden"/>`;
+      (opts.markers || []).forEach(m => {
+        const r = m.hollow ? 3.5 : 4.5;
+        s += `<circle class="marker" data-i="${m.i}" cx="${x(m.i)}" cy="${y(values[m.i])}" r="${r}" fill="${m.hollow ? "var(--surface)" : m.color}" stroke="${m.hollow ? m.color : "var(--surface)"}" stroke-width="${m.hollow ? 2 : 1.5}"/>`;
+      });
+      if (opts.xLabels) opts.xLabels.forEach(l => { s += `<text x="${x(l.i)}" y="${H - 6}" text-anchor="${l.anchor || "middle"}">${esc(l.text)}</text>`; });
+      if (opts.cursor) {
+        s += `<g class="cursor-g"><line class="cursor" x1="0" x2="0" y1="${P.t}" y2="${H - P.b}"/><circle class="cursor-dot" cx="0" cy="0" r="5"/></g>`;
+      }
+      s += `<rect class="hit" x="${P.l}" y="0" width="${W - P.l - P.r}" height="${H}" fill="transparent"/>`;
+      s += "</svg>";
+      container.innerHTML = s;
+      container.appendChild(tip);
+      svg = container.querySelector("svg");
+      bind();
+      if (cursorIdx != null) setCursor(cursorIdx, true);
+    }
+
+    function indexFromEvent(ev) {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * W / r.width;
+      return Math.max(0, Math.min(n - 1, Math.round((px - P.l) * (n - 1) / (W - P.l - P.r))));
+    }
+    function bind() {
+      const hit = svg.querySelector(".hit"), hl = svg.querySelector(".hover-line");
+      function move(ev) {
+        const i = indexFromEvent(ev);
+        hl.setAttribute("x1", x(i)); hl.setAttribute("x2", x(i)); hl.setAttribute("visibility", "visible");
+        if (opts.tooltip) {
+          const r = svg.getBoundingClientRect(), sc = r.width / W;
+          tip.innerHTML = opts.tooltip(i);
+          tip.style.left = Math.max(40, Math.min(r.width - 40, x(i) * sc)) + "px";
+          tip.style.top = (y(values[i]) * sc) + "px";
+          tip.classList.add("show");
+        }
+      }
+      function leave() { hl.setAttribute("visibility", "hidden"); tip.classList.remove("show"); }
+      [hit].concat($all(".marker", svg)).forEach(el => {
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerleave", leave);
+        if (opts.onClick) el.addEventListener("click", ev => opts.onClick(indexFromEvent(ev)));
+      });
+    }
+    function setCursor(i, instant) {
+      cursorIdx = i;
+      if (!svg) return;
+      const g = svg.querySelector(".cursor-g");
+      if (!g) return;
+      const line = g.querySelector(".cursor"), dot = g.querySelector(".cursor-dot");
+      [line, dot].forEach(el => { if (instant) el.style.transition = "none"; });
+      line.style.transform = `translate(${x(i)}px, 0px)`;
+      dot.style.transform = `translate(${x(i)}px, ${y(values[i])}px)`;
+      if (instant) requestAnimationFrame(() => [line, dot].forEach(el => { el.style.transition = ""; }));
+    }
+
+    draw();
+    if (window.ResizeObserver) new ResizeObserver(() => draw()).observe(container);
+    else window.addEventListener("resize", draw);
+    return { setCursor };
   }
 
   function initEloChart() {
@@ -123,144 +379,398 @@
     const series = JSON.parse(dataEl.textContent);
     if (series.length < 2) return;
     const vals = series.map(p => p[1]);
-    const d = s => (s || "").slice(0, 10).split("-").reverse().join("/");
+    const d = s => (s || "").slice(0, 10).replace(/\./g, "-").split("-").reverse().join("/");
+    const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    const pad = Math.max(10, Math.round((hi - lo) * .12));
     lineChart(el, vals, {
-      label: "Évolution de l'Elo", area: false,
+      label: "Évolution de l'Elo", height: 220, min: lo - pad, max: hi + pad,
+      gridValues: [lo, Math.round((lo + hi) / 2), hi],
       xLabels: [{ i: 0, text: d(series[0][0]), anchor: "start" }, { i: series.length - 1, text: d(series[series.length - 1][0]), anchor: "end" }],
+      tooltip: i => `${esc(d(series[i][0]))} · <b>${vals[i]}</b>`,
     });
   }
 
-  // ---------------------------------------------------------------- échiquier
-  function squareXY(sq, orientation) {
-    const f = sq.charCodeAt(0) - 97, rank = parseInt(sq[1], 10);
-    let x = f, y = 8 - rank;
-    if (orientation === "b") { x = 7 - x; y = 7 - y; }
-    return [x, y];
-  }
-
-  function arrowSvg(uci, orientation, color) {
-    if (!uci) return "";
-    const [x1, y1] = squareXY(uci.slice(0, 2), orientation), [x2, y2] = squareXY(uci.slice(2, 4), orientation);
-    const ax = x1 * 45 + 22.5, ay = y1 * 45 + 22.5, bx = x2 * 45 + 22.5, by = y2 * 45 + 22.5;
-    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
-    const head = 15, ex = bx - ux * head, ey = by - uy * head, px = -uy, py = ux;
-    return `<g opacity=".82"><line x1="${ax}" y1="${ay}" x2="${ex}" y2="${ey}" stroke="${color}" stroke-width="8" stroke-linecap="round"/>` +
-      `<polygon points="${bx},${by} ${ex + px * 11},${ey + py * 11} ${ex - px * 11},${ey - py * 11}" fill="${color}"/></g>`;
-  }
-
-  function renderBoard(el, fen, orientation, pieces, opts) {
-    opts = opts || {};
-    const rows = fen.split(" ")[0].split("/");
-    let s = `<svg viewBox="0 0 360 360" xmlns="${NS}" role="img" aria-label="Échiquier">`;
-    for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) {
-      const light = (r + f) % 2 === 0;
-      s += `<rect x="${f * 45}" y="${r * 45}" width="45" height="45" fill="${light ? "#ede6d6" : "#9c7b5b"}"/>`;
-    }
-    (opts.highlight || []).forEach(sq => {
-      const [x, y] = squareXY(sq, orientation);
-      s += `<rect x="${x * 45}" y="${y * 45}" width="45" height="45" fill="#e8c547" opacity=".45"/>`;
-    });
+  // ================================================================ échiquier
+  function parseFen(fen) {
+    const map = {}, rows = fen.split(" ")[0].split("/");
     rows.forEach((row, r) => {
       let f = 0;
       for (const ch of row) {
         if (/\d/.test(ch)) { f += parseInt(ch, 10); continue; }
-        const sq = String.fromCharCode(97 + f) + (8 - r);
-        const [x, y] = squareXY(sq, orientation);
-        const p = (pieces[ch] || "").replace(/\sid="[^"]*"/g, "");
-        s += `<g transform="translate(${x * 45},${y * 45})">${p}</g>`;
+        map[String.fromCharCode(97 + f) + (8 - r)] = ch;
         f++;
       }
     });
-    for (let i = 0; i < 8; i++) {
-      const file = orientation === "b" ? String.fromCharCode(104 - i) : String.fromCharCode(97 + i);
-      const rank = orientation === "b" ? i + 1 : 8 - i;
-      s += `<text x="${i * 45 + 41}" y="357" font-size="8" text-anchor="end" fill="${i % 2 ? "#ede6d6" : "#9c7b5b"}" font-family="sans-serif">${file}</text>`;
-      s += `<text x="2" y="${i * 45 + 10}" font-size="8" fill="${i % 2 ? "#ede6d6" : "#9c7b5b"}" font-family="sans-serif">${rank}</text>`;
-    }
-    (opts.arrows || []).forEach(a => { s += arrowSvg(a.uci, orientation, a.color); });
-    s += "</svg>";
-    el.innerHTML = s;
+    return map;
   }
 
+  function material(fen) {
+    const v = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 }, out = { w: 0, b: 0 };
+    Object.values(parseFen(fen)).forEach(ch => {
+      const lower = ch.toLowerCase();
+      out[ch === lower ? "b" : "w"] += v[lower] || 0;
+    });
+    return out;
+  }
+
+  function createBoard(el, pieces) {
+    let orientation = "w", prevMap = null;
+    const S = 45;
+    el.innerHTML = `<svg viewBox="0 0 360 360" xmlns="${NS}">` +
+      `<defs><radialGradient id="cc-check"><stop offset="0" stop-color="#ff2d20" stop-opacity=".95"/><stop offset=".5" stop-color="#e0312a" stop-opacity=".5"/><stop offset="1" stop-color="#e0312a" stop-opacity="0"/></radialGradient></defs>` +
+      `<g class="squares"></g><g class="hl"></g><g class="coords"></g><g class="ghosts"></g><g class="pieces"></g><g class="overlay"></g></svg>`;
+    const svg = el.firstChild;
+    const L = name => svg.querySelector("." + name);
+    let sq = "";
+    for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) {
+      sq += `<rect class="${(r + f) % 2 ? "sq-d" : "sq-l"}" x="${f * S}" y="${r * S}" width="${S}" height="${S}"/>`;
+    }
+    L("squares").innerHTML = sq;
+
+    function xy(s) {
+      let x = s.charCodeAt(0) - 97, yy = 8 - parseInt(s[1], 10);
+      if (orientation === "b") { x = 7 - x; yy = 7 - yy; }
+      return [x, yy];
+    }
+    function drawCoords() {
+      let s = "";
+      for (let i = 0; i < 8; i++) {
+        const file = orientation === "b" ? String.fromCharCode(104 - i) : String.fromCharCode(97 + i);
+        const rank = orientation === "b" ? i + 1 : 8 - i;
+        // Bas : case (i, 7) claire si i impair ; gauche : case (0, i) claire si i pair
+        s += `<text class="${i % 2 ? "co-d" : "co-l"}" x="${i * S + 42}" y="357" font-size="8.5" font-weight="700" text-anchor="end" font-family="system-ui, sans-serif">${file}</text>`;
+        s += `<text class="${i % 2 ? "co-l" : "co-d"}" x="2.5" y="${i * S + 10}" font-size="8.5" font-weight="700" font-family="system-ui, sans-serif">${rank}</text>`;
+      }
+      L("coords").innerHTML = s;
+    }
+    function pieceSvg(ch) { return (pieces[ch] || "").replace(/\sid="[^"]*"/g, ""); }
+    function pieceG(s, ch, cls) {
+      const [x, yy] = xy(s);
+      return `<g class="piece ${cls || ""}" data-sq="${s}" transform="translate(${x * S},${yy * S})"><g class="pi">${pieceSvg(ch)}</g></g>`;
+    }
+    function arrow(uci, color) {
+      const [x1, y1] = xy(uci.slice(0, 2)), [x2, y2] = xy(uci.slice(2, 4));
+      const ax = x1 * S + 22.5, ay = y1 * S + 22.5, bx = x2 * S + 22.5, by = y2 * S + 22.5;
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+      const head = 14, ex = bx - ux * head, ey = by - uy * head, px = -uy, py = ux;
+      const sx = ax + ux * 8, sy = ay + uy * 8;
+      return `<g opacity=".86" style="pointer-events:none"><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${color}" stroke-width="7.5" stroke-linecap="round"/>` +
+        `<polygon points="${bx},${by} ${ex + px * 10.5},${ey + py * 10.5} ${ex - px * 10.5},${ey - py * 10.5}" fill="${color}" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/></g>`;
+    }
+    function badge(s, cls) {
+      const [x, yy] = xy(s);
+      const cx = Math.min(x * S + 40, 350.5), cy = Math.max(yy * S + 5, 9.5);
+      const glyph = CLS_GLYPH[cls] || "";
+      const fs = glyph.length > 1 ? 8 : 10;
+      return `<g class="badge-sq" style="pointer-events:none"><circle cx="${cx}" cy="${cy}" r="9" fill="${CLS_COLORS[cls]}" stroke="#fff" stroke-width="1.6"/>` +
+        `<text x="${cx}" y="${cy + fs * .36}" text-anchor="middle" font-size="${fs}" font-weight="800" fill="#fff" font-family="system-ui, sans-serif" letter-spacing="-.5">${glyph}</text></g>`;
+    }
+
+    function render(fen, o) {
+      o = o || {};
+      if (o.orientation && o.orientation !== orientation) { orientation = o.orientation; drawCoords(); }
+      else if (!L("coords").firstChild) drawCoords();
+      const map = parseFen(fen);
+      // Cases surlignées : dernier coup + roi en échec
+      let hl = "";
+      (o.lastMove || []).forEach(s => {
+        const [x, yy] = xy(s);
+        hl += o.lastColor
+          ? `<rect x="${x * S}" y="${yy * S}" width="${S}" height="${S}" fill="${o.lastColor}" fill-opacity=".42"/>`
+          : `<rect class="hl-last" x="${x * S}" y="${yy * S}" width="${S}" height="${S}"/>`;
+      });
+      if (o.check) {
+        const [x, yy] = xy(o.check);
+        hl += `<rect x="${x * S}" y="${yy * S}" width="${S}" height="${S}" fill="url(#cc-check)"/>`;
+      }
+      L("hl").innerHTML = hl;
+      // Pièces
+      let ps = "";
+      Object.keys(map).forEach(s => { ps += pieceG(s, map[s]); });
+      L("pieces").innerHTML = ps;
+      L("ghosts").innerHTML = "";
+      // Animation (uniquement pour un déplacement d'un demi-coup)
+      if (o.movers && prevMap && motionOK()) {
+        const dur = o.duration || 210;
+        const froms = new Set(o.movers.map(m => m.from)), tos = new Set(o.movers.map(m => m.to));
+        o.movers.forEach(m => {
+          const g = L("pieces").querySelector(`[data-sq="${m.to}"] .pi`);
+          if (!g || !g.animate) return;
+          const [fx, fy] = xy(m.from), [tx, ty] = xy(m.to);
+          g.parentNode.parentNode.appendChild(g.parentNode); // la pièce qui bouge passe au-dessus
+          g.animate([{ transform: `translate(${(fx - tx) * S}px, ${(fy - ty) * S}px)` }, { transform: "translate(0px, 0px)" }],
+            { duration: dur, easing: EASE });
+        });
+        let gh = "";
+        Object.keys(prevMap).forEach(s => { if (map[s] !== prevMap[s] && !froms.has(s)) gh += pieceG(s, prevMap[s], "ghost"); });
+        L("ghosts").innerHTML = gh;
+        $all(".ghost", L("ghosts")).forEach(g => {
+          const a = g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" });
+          a.onfinish = () => g.remove();
+        });
+        Object.keys(map).forEach(s => {
+          if (map[s] !== prevMap[s] && !tos.has(s)) {
+            const g = L("pieces").querySelector(`[data-sq="${s}"]`);
+            if (g && g.animate) g.animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur, easing: "ease-out" });
+          }
+        });
+      }
+      prevMap = map;
+      // Flèches et pastille de classement
+      let ov = "";
+      (o.arrows || []).forEach(a => { if (a.uci) ov += arrow(a.uci, a.color); });
+      if (o.badge) ov += badge(o.badge.sq, o.badge.cls);
+      L("overlay").innerHTML = ov;
+      if (o.badge && motionOK()) {
+        const b = L("overlay").querySelector(".badge-sq");
+        if (b && b.animate) {
+          b.style.transformBox = "fill-box"; b.style.transformOrigin = "center";
+          b.animate([{ opacity: 0, transform: "scale(.6)" }, { opacity: 1, transform: "scale(1)" }],
+            { duration: 260, easing: "cubic-bezier(.3,1.6,.5,1)", delay: o.movers ? 120 : 0, fill: "backwards" });
+        }
+      }
+    }
+    return { render, get orientation() { return orientation; } };
+  }
+
+  // Déplacements à animer pour un coup UCI (le roque déplace aussi la tour)
+  function moversFor(uci, fenBefore) {
+    const from = uci.slice(0, 2), to = uci.slice(2, 4), out = [{ from, to }];
+    const p = parseFen(fenBefore)[from];
+    if (p && p.toLowerCase() === "k" && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2) {
+      const rank = from[1], kingside = to[0] === "g";
+      out.push({ from: (kingside ? "h" : "a") + rank, to: (kingside ? "f" : "d") + rank });
+    }
+    return out;
+  }
+
+  function kingSquare(fen, color) {
+    const map = parseFen(fen), k = color === "w" ? "K" : "k";
+    return Object.keys(map).find(s => map[s] === k) || null;
+  }
+
+  function fmtClock(sec) {
+    if (sec == null) return "";
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
+  }
+
+  // ================================================================ analyse d'une partie
   function initGame(startPly) {
     const dataEl = $("#game-data");
     if (!dataEl) return;
     const data = JSON.parse(dataEl.textContent);
     const boardEl = $("#board"), info = $("#move-info"), list = $("#movelist");
-    let orientation = data.orientation, k = 0;
     const N = data.fens.length - 1;
+    const pc = data.player_color;
+    const moveColor = data.moves.map(m => data.fens[m.i].split(" ")[1]);
+    let orientation = data.orientation, k = -1, showBest = true, timer = null;
+    const board = createBoard(boardEl, data.pieces);
+    const panelTabs = tabs("game", { scope: $(".panel") });
 
     // Liste des coups
     let html = "";
     data.moves.forEach((m, idx) => {
       if (idx === 0 && m.i % 2 === 1) html += `<span class="no">${Math.floor(m.i / 2) + 1}.</span><span></span>`;
       if (m.i % 2 === 0) html += `<span class="no">${Math.floor(m.i / 2) + 1}.</span>`;
-      const sym = m.symbol ? `<span class="t-${m.cls}">${m.symbol}</span>` : "";
-      html += `<span class="mv ${m.cls ? "cls-" + m.cls : ""}" data-k="${m.i + 1}" title="${esc(m.cls_label || "")}">${m.cls ? '<span class="dot"></span>' : ""}${esc(m.san)}${sym}</span>`;
+      const err = ERRORS.includes(m.cls);
+      html += `<span class="mv ${m.cls ? "cls-" + m.cls : ""} ${err ? "is-error" : ""}" data-k="${m.i + 1}" title="${esc(m.cls_label || "")}" role="button" tabindex="-1">` +
+        `${m.cls ? '<span class="dot"></span>' : ""}<span>${esc(m.san)}</span>${m.symbol ? `<span class="sym">${esc(m.symbol)}</span>` : ""}</span>`;
     });
-    list.innerHTML = html;
-    list.addEventListener("click", ev => { const t = ev.target.closest(".mv"); if (t) go(parseInt(t.dataset.k, 10)); });
+    list.innerHTML = html || '<span></span><span class="faint">Aucun coup.</span>';
+    list.addEventListener("click", ev => { const t = ev.target.closest(".mv"); if (t) { stop(); go(parseInt(t.dataset.k, 10)); } });
 
     // Courbe
     let chart = null;
     const chartEl = $("#wp-chart");
     if (chartEl && data.wp) {
-      const markers = data.moves.filter(m => m.mine && (m.cls === "blunder" || m.cls === "mistake"))
-        .map(m => ({ i: m.i + 1, color: CLS_COLORS[m.cls], title: m.label + " " + (m.cls_label || "") }));
+      const markers = data.moves
+        .filter(m => (m.mine && (m.cls === "blunder" || m.cls === "mistake")) || (m.mine === false && m.cls === "blunder"))
+        .map(m => ({ i: m.i + 1, color: CLS_COLORS[m.cls], hollow: !m.mine }));
       chart = lineChart(chartEl, data.wp, {
-        min: 0, max: 100, area: true, height: 160, gridValues: [0, 50, 100], gridFormat: v => v + " %",
-        markers, label: "Tes chances de gain coup par coup",
+        min: 0, max: 100, height: 170, baseline: 50, gridValues: [0, 50, 100], gridFormat: v => v + " %",
+        markers, cursor: true, lineColor: "var(--muted)", label: "Tes chances de gain coup par coup",
+        tooltip: i => {
+          if (i === 0) return `Départ · <b>${fmt(data.wp[0])} %</b>`;
+          const m = data.moves[i - 1];
+          return `${esc(m.label)}${m.symbol ? `<span style="color:${CLS_COLORS[m.cls]}">${esc(m.symbol)}</span>` : ""} · <b>${fmt(data.wp[i])} %</b>`;
+        },
+        onClick: i => { stop(); go(i); },
       });
-      chart.svg.addEventListener("click", ev => go(chart.indexFromEvent(ev)));
     }
 
-    function go(newK) {
-      k = Math.max(0, Math.min(N, newK));
+    function playerBar(el, color, kk) {
+      if (!el) return;
+      const p = data.players[color] || {};
+      const mat = material(data.fens[kk]);
+      const diff = mat[color] - mat[color === "w" ? "b" : "w"];
+      let clock = null;
+      for (let i = Math.min(kk, data.moves.length) - 1; i >= 0; i--) {
+        if (moveColor[i] === color && data.moves[i].clock != null) { clock = data.moves[i].clock; break; }
+      }
+      if (clock == null) clock = data.initial_clock;
+      const toMove = kk < N && data.fens[kk].split(" ")[1] === color;
+      el.classList.toggle("to-move", toMove);
+      el.innerHTML = `<span class="side side-${color}"></span><span class="name">${esc(p.name || "?")}</span>` +
+        `${p.elo ? `<span class="elo">${p.elo}</span>` : ""}${color === pc ? '<span class="you">toi</span>' : ""}` +
+        `${diff > 0 ? `<span class="faint small tabular">+${diff}</span>` : ""}` +
+        `<span class="clock ${clock != null && clock < 30 ? "low" : ""}">${fmtClock(clock)}</span>`;
+    }
+
+    function evalBar(kk) {
+      const bar = $("#evalbar");
+      if (!bar || !data.wp) return;
+      const white = pc === "w" ? data.wp[kk] : 100 - data.wp[kk];
+      bar.classList.toggle("flipped", orientation === "b");
+      $(".fill", bar).style.height = white + "%";
+      const whiteEnd = orientation === "w" ? "bottom" : "top", blackEnd = whiteEnd === "bottom" ? "top" : "bottom";
+      $(".ev-label." + whiteEnd, bar).textContent = white >= 50 ? Math.round(white) : "";
+      $(".ev-label." + blackEnd, bar).textContent = white < 50 ? Math.round(100 - white) : "";
+      bar.title = `Chances de gain des Blancs : ${fmt(white)} %`;
+    }
+
+    function bubble(kk) {
+      const m = kk > 0 ? data.moves[kk - 1] : null;
+      info.className = "coach-bubble" + (m && m.cls ? " cls-" + m.cls : "");
+      if (!m) {
+        const nKey = (data.key || []).length;
+        info.innerHTML = `<div class="cb-head"><span class="cls-icon" style="--cls-c:var(--accent)">${icon("play")}</span>` +
+          `<div><div class="cb-title">Position de départ</div><div class="cb-sub">${data.wp ? (nKey ? `${nKey} moment${nKey > 1 ? "s" : ""} clé${nKey > 1 ? "s" : ""} à revoir` : "Aucune erreur marquante") : "Partie non analysée : rejoue les coups librement."}</div></div></div>` +
+          `<p class="cb-empty" style="margin:.7rem 0 0">Utilise <kbd>←</kbd> <kbd>→</kbd>, la lecture automatique ou clique sur un coup${data.wp ? " ou sur la courbe" : ""}.</p>`;
+        return;
+      }
+      const who = m.mine === true ? "ton coup" : m.mine === false ? "coup adverse" : "";
+      let h = `<div class="cb-head">`;
+      h += m.cls ? `<span class="cls-icon">${m.cls === "best" ? icon("star") : m.cls === "good" ? icon("check") : esc(m.symbol)}</span>`
+        : `<span class="cls-icon" style="--cls-c:var(--border-strong)">${icon("next")}</span>`;
+      h += `<div><div class="cb-title"><span class="mono">${esc(m.label)}${m.symbol ? esc(m.symbol) : ""}</span>${m.cls ? ` · ${esc(m.cls_label)}` : ""}</div>`;
+      h += `<div class="cb-sub">${[who, m.phase].filter(Boolean).map(esc).join(" · ")}</div></div>`;
+      if (data.wp) {
+        const d = data.wp[kk] - data.wp[kk - 1];
+        const dcls = Math.abs(d) < 1 ? "faint" : d > 0 ? "v-good" : "v-bad";
+        h += `<div class="cb-wp"><div class="v">${fmt(data.wp[kk])} %</div><div class="d ${dcls}">${d > 0 ? "+" : d < 0 ? "−" : "±"}${fmt(Math.abs(d))} pts</div></div>`;
+      }
+      h += "</div>";
+      if (m.explain && m.explain.length) h += `<ul class="cb-list">${m.explain.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
+      const showsBest = (m.explain || []).some(t => t.indexOf("Meilleur") === 0);
+      if (ERRORS.includes(m.cls) && m.best && m.best !== m.san && !showsBest) {
+        h += `<div class="cb-best">${icon("bulb")} Meilleur selon Stockfish : <b>${esc(m.best)}</b></div>`;
+      }
+      if (!m.cls && !data.wp) h += `<p class="cb-empty" style="margin:.6rem 0 0">Lance l'analyse pour obtenir le classement et l'explication de chaque coup.</p>`;
+      info.innerHTML = h;
+    }
+
+    function scrollMoveIntoView(el) {
+      const box = el.closest(".panel-scroll");
+      if (!box || box.offsetParent === null) return;
+      const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+      if (r.top < b.top + 4) box.scrollTop -= (b.top - r.top) + 40;
+      else if (r.bottom > b.bottom - 4) box.scrollTop += (r.bottom - b.bottom) + 40;
+    }
+
+    function go(newK, opts) {
+      opts = opts || {};
+      newK = Math.max(0, Math.min(N, newK));
+      if (newK === k && !opts.force) return;
+      let movers = null;
+      if (!opts.force && k >= 0 && Math.abs(newK - k) === 1) {
+        if (newK > k) movers = moversFor(data.moves[newK - 1].uci, data.fens[k]);
+        else movers = moversFor(data.moves[k - 1].uci, data.fens[newK]).map(mv => ({ from: mv.to, to: mv.from }));
+      }
+      k = newK;
       const m = k > 0 ? data.moves[k - 1] : null;
       const arrows = [];
-      if (m) {
-        arrows.push({ uci: m.uci, color: m.cls ? CLS_COLORS[m.cls] : "#4a7fa8" });
-        if (m.best_uci && m.best_uci !== m.uci && ["inaccuracy", "mistake", "blunder"].includes(m.cls)) {
-          arrows.push({ uci: m.best_uci, color: "#3e9b5f" });
-        }
-      }
-      renderBoard(boardEl, data.fens[k], orientation, data.pieces, {
-        arrows, highlight: m ? [m.uci.slice(0, 2), m.uci.slice(2, 4)] : [],
+      if (m && showBest && m.best_uci && m.best_uci !== m.uci && ERRORS.includes(m.cls)) arrows.push({ uci: m.best_uci, color: "var(--c-arrow-best)" });
+      board.render(data.fens[k], {
+        orientation, movers,
+        lastMove: m ? [m.uci.slice(0, 2), m.uci.slice(2, 4)] : [],
+        lastColor: m && ERRORS.includes(m.cls) ? CLS_COLORS[m.cls] : null,
+        check: m && /[+#]$/.test(m.san) ? kingSquare(data.fens[k], data.fens[k].split(" ")[1]) : null,
+        arrows, badge: m && m.cls ? { sq: m.uci.slice(2, 4), cls: m.cls } : null,
       });
       $all(".mv.current", list).forEach(e => e.classList.remove("current"));
       const cur = list.querySelector(`.mv[data-k="${k}"]`);
-      if (cur) { cur.classList.add("current"); cur.scrollIntoView({ block: "nearest" }); }
+      if (cur) { cur.classList.add("current"); scrollMoveIntoView(cur); }
+      $all(".moment").forEach(el => el.classList.toggle("current", parseInt(el.dataset.goto, 10) === k));
       if (chart) chart.setCursor(k);
-      const bar = $("#evalbar-fill");
-      if (bar && data.wp) bar.style.height = data.wp[k] + "%";
-      if (!m) { info.innerHTML = '<span class="muted">Position de départ. Utilise les flèches du clavier ou clique sur un coup.</span>'; return; }
-      let h = `<div class="row" style="gap:.5rem"><b>${esc(m.label)}${m.symbol ? `<span class="t-${m.cls}">${m.symbol}</span>` : ""}</b>`;
-      if (m.cls) h += `<span class="badge" style="color:${CLS_COLORS[m.cls]}">${esc(m.cls_label)}</span>`;
-      if (m.mine === true) h += '<span class="faint">ton coup</span>'; else if (m.mine === false) h += '<span class="faint">coup adverse</span>';
-      if (m.wp_after != null) h += `<span class="spacer"></span><span class="muted">tes chances : ${fmt(data.wp[k])} %</span>`;
-      h += "</div>";
-      if (m.explain && m.explain.length) h += "<ul style='margin:.4rem 0 0;padding-left:1.1rem'>" + m.explain.map(t => `<li>${esc(t)}</li>`).join("") + "</ul>";
-      else if (["inaccuracy", "mistake", "blunder"].includes(m.cls) && m.best && m.best !== m.san) h += `<p class="muted" style="margin:.4rem 0 0">Meilleur selon Stockfish : ${esc(m.best)}</p>`;
-      info.innerHTML = h;
+      const top = orientation === "w" ? "b" : "w";
+      playerBar($("#bar-top"), top, k);
+      playerBar($("#bar-bottom"), orientation, k);
+      evalBar(k);
+      bubble(k);
+      const url = new URL(location.href);
+      if (k > 0) url.searchParams.set("coup", k - 1); else url.searchParams.delete("coup");
+      history.replaceState(null, "", url);
+      updatePlay();
+    }
+
+    // Lecture automatique
+    const playBtn = $('[data-nav="play"]');
+    function updatePlay() {
+      if (!playBtn) return;
+      $("use", playBtn).setAttribute("href", timer ? "#i-pause" : "#i-play");
+      playBtn.title = timer ? "Pause (Espace)" : "Lecture automatique (Espace)";
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; updatePlay(); } }
+    function play() {
+      if (timer) { stop(); return; }
+      if (k >= N) go(0);
+      timer = setInterval(() => { if (k >= N) stop(); else go(k + 1); }, 950);
+      updatePlay();
+    }
+
+    const keys = (data.key || []).map(i => i + 1);
+    if (!keys.length) $all('[data-nav$="-key"]').forEach(b => { b.disabled = true; b.title = "Aucun moment clé dans cette partie"; });
+    function nextKey() { const t = keys.find(x => x > k); if (t != null) go(t); }
+    function prevKey() { const t = keys.slice().reverse().find(x => x < k); if (t != null) go(t); }
+    function flip() { orientation = orientation === "w" ? "b" : "w"; go(k, { force: true }); }
+    function toggleBest(btn) {
+      showBest = !showBest;
+      if (btn) { btn.classList.toggle("active", showBest); btn.setAttribute("aria-pressed", String(showBest)); }
+      go(k, { force: true });
     }
 
     $all("[data-nav]").forEach(b => b.addEventListener("click", () => {
       const a = b.dataset.nav;
+      if (a === "play") return play();
+      stop();
       if (a === "first") go(0); else if (a === "prev") go(k - 1); else if (a === "next") go(k + 1);
-      else if (a === "last") go(N); else if (a === "flip") { orientation = orientation === "w" ? "b" : "w"; go(k); }
+      else if (a === "last") go(N); else if (a === "flip") flip(); else if (a === "best") toggleBest(b);
+      else if (a === "next-key") nextKey(); else if (a === "prev-key") prevKey();
     }));
     document.addEventListener("keydown", ev => {
-      if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-      if (ev.key === "ArrowLeft") { go(k - 1); ev.preventDefault(); }
-      else if (ev.key === "ArrowRight") { go(k + 1); ev.preventDefault(); }
-      else if (ev.key === "Home") go(0); else if (ev.key === "End") go(N);
+      if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName) || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if ($("#appearance") && !$("#appearance").hidden) return;
+      const keyMap = {
+        ArrowLeft: () => go(k - 1), ArrowRight: () => go(k + 1), Home: () => go(0), End: () => go(N),
+        ArrowUp: prevKey, ArrowDown: nextKey, f: flip, F: flip, b: () => toggleBest($('[data-nav="best"]')), B: () => toggleBest($('[data-nav="best"]')),
+      };
+      if (ev.key === " " && !(document.activeElement && document.activeElement.tagName === "BUTTON")) { play(); ev.preventDefault(); return; }
+      if (keyMap[ev.key]) {
+        if (ev.key === "ArrowUp" || ev.key === "ArrowDown") { if (!keys.length) return; }
+        stop(); keyMap[ev.key](); ev.preventDefault();
+      }
+    });
+    // Glisser sur l'échiquier (mobile) : coup suivant / précédent
+    let sx = null, sy = null;
+    boardEl.addEventListener("pointerdown", ev => { sx = ev.clientX; sy = ev.clientY; });
+    boardEl.addEventListener("pointerup", ev => {
+      if (sx == null) return;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { stop(); go(k + (dx < 0 ? 1 : -1)); }
     });
     $all("[data-goto]").forEach(el => el.addEventListener("click", () => {
+      stop();
       go(parseInt(el.dataset.goto, 10));
-      boardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (window.innerWidth <= 980) boardEl.scrollIntoView({ behavior: motionOK() ? "smooth" : "auto", block: "center" });
     }));
-    go(startPly != null ? startPly : 0);
+    if (panelTabs) panelTabs.activate("moves");
+    go(startPly != null ? startPly : 0, { force: true });
   }
 
-  window.ChessCoach = { initJobPanel, initGameJob, initGameFilters, initEloChart, initGame };
+  initCommon();
+  initAppearance();
+  window.ChessCoach = { initJobPanel, initGameJob, initGameFilters, initEloChart, initGame, initHome, initDashboard };
 })();

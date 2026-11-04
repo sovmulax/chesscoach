@@ -1,256 +1,387 @@
 {% extends "analyzer/base.html" %}
 {% load chess_extras %}
 {% block title %}{{ export.name }}{% endblock %}
+{% block crumbs %}<a href="{% url 'analyzer:export_list' %}">Mes analyses</a><span class="sep">/</span><span class="current">{{ export.name }}</span>{% endblock %}
 {% block content %}
 {% include "analyzer/_export_header.html" with tab="dashboard" %}
 
-{% if time_classes|length > 1 %}
-<div class="tabs">
-  <a href="?" class="{% if not time_class %}active{% endif %}">Toutes cadences</a>
-  {% for tc, label, n in time_classes %}<a href="?cadence={{ tc }}" class="{% if time_class == tc %}active{% endif %}">{{ label }} ({{ n }})</a>{% endfor %}
-</div>
-{% endif %}
-
 {% if not s.n_games %}
   <div class="card empty section">
-    {% if sync_running %}Import des parties depuis Chess.com en cours… la page se mettra à jour.{% else %}Aucune partie dans cet export.{% endif %}
+    {% icon "swords" %}
+    {% if sync_running %}<p><b>Import des parties depuis Chess.com en cours…</b></p><p class="small">La page se mettra à jour toute seule.</p>{% else %}<p><b>Aucune partie dans cet export.</b></p>{% endif %}
   </div>
 {% else %}
 {% with b=s.basic e=s.engine %}
 {% with tcinfo=b.by_time_class|get:b.main_time_class %}
 
-<!-- Vue d'ensemble -->
-<div class="section">
-  <h2>Vue d'ensemble <small class="muted">{{ b.first_date|frdate }} → {{ b.last_date|frdate }}</small></h2>
-  <div class="grid grid-4">
-    <div class="stat"><div class="value v-win">{{ b.results.win }}</div><div class="label">victoires</div></div>
-    <div class="stat"><div class="value v-draw">{{ b.results.draw }}</div><div class="label">nulles</div></div>
-    <div class="stat"><div class="value v-loss">{{ b.results.loss }}</div><div class="label">défaites</div></div>
-    <div class="stat dark"><div class="value">{{ b.results.score|num }} %</div><div class="label">de score sur {{ b.results.n }} parties</div></div>
-    {% if tcinfo.elo_start %}
-    <div class="stat"><div class="value">{{ tcinfo.elo_start }} → {{ tcinfo.elo_end }}</div>
-      <div class="label">Elo {{ tc_labels|get:b.main_time_class }} · pic {{ tcinfo.elo_peak }} le {{ tcinfo.elo_peak_date|frdate }}, creux {{ tcinfo.elo_low }} le {{ tcinfo.elo_low_date|frdate }}</div></div>
-    {% endif %}
-    <div class="stat"><div class="value">{{ b.by_color.w.score|num }} % · {{ b.by_color.b.score|num }} %</div>
-      <div class="label">avec les Blancs ({{ b.by_color.w.n }}) / les Noirs ({{ b.by_color.b.n }})</div></div>
-    <div class="stat"><div class="value">{{ b.avg_moves|num:0 }} coups</div><div class="label">par partie en moyenne{% if b.avg_opp_elo_diff is not None %} · adversaires {{ b.avg_opp_elo_diff|signed:0 }} Elo{% endif %}</div></div>
-    {% if e %}
-    <div class="stat"><div class="value">{{ e.per_game.blunder|num:2 }}</div><div class="label">gaffe(s) par partie (adversaires : {{ e.opp_per_game.blunder|num:2 }})</div></div>
-    {% else %}
-    <div class="stat"><div class="value">{{ b.lost_on_time }}</div><div class="label">défaite(s) au temps · {{ b.won_on_time }} victoire(s) au temps</div></div>
+{# ------------------------------------------------------------ synthèse #}
+<section class="section">
+  <div class="section-head">
+    <h2>{% icon "chart" %} En un coup d'œil</h2>
+    <span class="muted small">{% icon "calendar" %} du {{ b.first_date|frdate }} au {{ b.last_date|frdate }}</span>
+    <span class="spacer"></span>
+    {% if time_classes|length > 1 %}
+    <nav class="segmented" aria-label="Filtrer par cadence">
+      <a href="?" class="{% if not time_class %}active{% endif %}">Toutes</a>
+      {% for tc, label, n in time_classes %}<a href="?cadence={{ tc }}" class="{% if time_class == tc %}active{% endif %}">{{ label }} <span class="faint">{{ n }}</span></a>{% endfor %}
+    </nav>
     {% endif %}
   </div>
-  {% if tcinfo.elo_series %}
-  <div class="card" style="margin-top:1rem">
-    <h3>Évolution de l'Elo ({{ tc_labels|get:b.main_time_class }})</h3>
-    <div id="elo-chart"></div>
-    {{ tcinfo.elo_series|json_script:"elo-data" }}
+  <div class="card card-pad-lg overview">
+    <div class="ring" style="--p: {{ b.results.score|css_num }}; --col: var(--{{ b.results.score|score_tone }}, var(--warn))">
+      <div><div class="ring-value">{{ b.results.score|num:0 }}<small style="font-size:.6em">%</small></div><div class="ring-label">de score</div></div>
+    </div>
+    <div>
+      <div class="row row-tight" style="justify-content:space-between;margin-bottom:.4rem">
+        <span><b class="v-win">{{ b.results.win }}</b> victoires · <b class="v-draw">{{ b.results.draw }}</b> nulles · <b class="v-loss">{{ b.results.loss }}</b> défaites</span>
+        <span class="muted small">{{ b.results.n }} parties</span>
+      </div>
+      <div class="wdl" style="margin-bottom:1.3rem"><span class="w" style="flex:{{ b.results.win }}"></span><span class="d" style="flex:{{ b.results.draw }}"></span><span class="l" style="flex:{{ b.results.loss }}"></span></div>
+      <div class="overview-stats">
+        {% if tcinfo.elo_start %}
+        <div class="kpi">
+          <div class="kpi-label">Elo {{ tc_labels|get:b.main_time_class }}</div>
+          <div class="kpi-value">{{ tcinfo.elo_end }}{% with d=tcinfo.elo_end|minus:tcinfo.elo_start %}{% if d %}<span class="delta {% if d > 0 %}up{% else %}down{% endif %}">{{ d|signed:0 }}</span>{% endif %}{% endwith %}</div>
+          <div class="kpi-sub">pic {{ tcinfo.elo_peak }} · creux {{ tcinfo.elo_low }}</div>
+        </div>
+        {% endif %}
+        {% if e %}
+        <div class="kpi">
+          <div class="kpi-label">Précision</div>
+          <div class="kpi-value {% if e.accuracy >= e.opp_accuracy %}v-good{% endif %}">{{ e.accuracy|num }}</div>
+          <div class="kpi-sub">adversaires : {{ e.opp_accuracy|num }}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Gaffes / partie</div>
+          <div class="kpi-value {% if e.per_game.blunder > e.opp_per_game.blunder %}v-bad{% else %}v-good{% endif %}">{{ e.per_game.blunder|num:2 }}</div>
+          <div class="kpi-sub">adversaires : {{ e.opp_per_game.blunder|num:2 }}</div>
+        </div>
+        {% endif %}
+        <div class="kpi">
+          <div class="kpi-label">Blancs · Noirs</div>
+          <div class="kpi-value">{{ b.by_color.w.score|num:0 }} % <span class="faint" style="font-weight:500">·</span> {{ b.by_color.b.score|num:0 }} %</div>
+          <div class="kpi-sub">{{ b.by_color.w.n }} / {{ b.by_color.b.n }} parties</div>
+        </div>
+      </div>
+    </div>
   </div>
+  {% if not e %}
+  <div class="notice section" style="margin-top:1rem">{% icon "cpu" %}<div><b>L'analyse moteur n'est pas encore faite</b>{% if s.n_analyzed %} ({{ s.n_analyzed }} parties analysées){% endif %}. Le diagnostic se base pour l'instant sur les résultats et les ouvertures : lance l'analyse pour obtenir les gaffes, les mats manqués, la conversion…</div></div>
+  {% elif s.n_analyzed < s.n_games %}
+  <p class="muted small" style="margin-top:.75rem">{% icon "cpu" %} Statistiques moteur calculées sur {{ s.n_analyzed }} parties analysées sur {{ s.n_games }}.</p>
   {% endif %}
-</div>
+</section>
 
-{% if not e %}
-<div class="notice section">L'analyse moteur n'est pas encore faite{% if s.n_analyzed %} ({{ s.n_analyzed }} parties analysées){% endif %} : le diagnostic ci-dessous se base seulement sur les résultats et les ouvertures. Lance l'analyse pour obtenir les gaffes, les mats manqués, la conversion, etc.</div>
-{% elif s.n_analyzed < s.n_games %}
-<p class="muted section" style="margin-top:1rem">Statistiques moteur calculées sur {{ s.n_analyzed }} parties analysées sur {{ s.n_games }}.</p>
-{% endif %}
-
-<!-- Diagnostic -->
-<div class="section">
-  <h2>Diagnostic</h2>
-  <p class="section-intro">Chaque point est calculé à partir de tes chiffres ; les exemples ouvrent directement la position concernée.</p>
-  {% for f in recs.findings %}
-  <div class="card finding {{ f.level }}">
-    <h3><span class="badge badge-{{ f.level }}">{{ f.level|level_label }}</span> {{ f.title }}</h3>
-    <p>{{ f.finding }}</p>
-    {% if f.actions %}<ul>{% for a in f.actions %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
-    {% if f.examples %}<div class="examples">{% for ex in f.examples %}{% include "analyzer/_example_chip.html" %}{% endfor %}</div>{% endif %}
+{# ------------------------------------------------------------ onglets #}
+<div class="subnav">
+  <div class="tabs" role="tablist" aria-label="Sections du tableau de bord" data-tabs="dash">
+    <a href="#coach" role="tab" data-tab="coach">{% icon "bulb" %} Coach {% if recs.findings %}<span class="count">{{ recs.findings|length }}</span>{% endif %}</a>
+    {% if e %}<a href="#erreurs" role="tab" data-tab="erreurs">{% icon "alert" %} Erreurs &amp; occasions</a>{% endif %}
+    <a href="#ouvertures" role="tab" data-tab="ouvertures">{% icon "book" %} Ouvertures</a>
+    <a href="#progression" role="tab" data-tab="progression">{% icon "chart" %} Progression</a>
+    <a href="#habitudes" role="tab" data-tab="habitudes">{% icon "clock" %} Habitudes</a>
+    <a href="#fondamentaux" role="tab" data-tab="fondamentaux">{% icon "star" %} Fondamentaux</a>
   </div>
-  {% empty %}
-  <div class="card empty">Pas de faiblesse marquée détectée sur cet échantillon. Garde les fondamentaux ci-dessous comme référence.</div>
-  {% endfor %}
 </div>
 
-{% if recs.strengths %}
-<div class="section">
-  <h2>Tes points forts</h2>
-  <div class="card"><ul class="strengths">{% for st in recs.strengths %}<li>{{ st }}</li>{% endfor %}</ul></div>
-</div>
-{% endif %}
+<div data-tab-panels="dash">
 
-<div class="section">
-  <h2>Plan d'entraînement</h2>
-  <div class="plan">{% for p in recs.plan %}<div class="card"><h3>{{ p.title }}</h3><p class="muted" style="margin:0">{{ p.text }}</p></div>{% endfor %}</div>
-</div>
+{# ================================================================ COACH #}
+<section class="tab-panel section" id="coach" role="tabpanel" data-panel="coach">
+  <div class="coach-layout">
+    <div class="stack">
+      <div class="card coach-hero">
+        <span class="coach-avatar" aria-hidden="true">♞</span>
+        <div>
+          {% if recs.findings %}
+          <h2>{{ recs.findings|length }} point{{ recs.findings|length|pluralize }} à travailler</h2>
+          <p>Ta priorité n°1 : <b style="color:var(--text)">{{ recs.findings.0.title|lower }}</b>. Chaque constat est calculé à partir de tes chiffres ; clique sur un exemple pour ouvrir la position.</p>
+          {% else %}
+          <h2>Pas de faiblesse marquée</h2>
+          <p>Rien ne ressort nettement sur cet échantillon. Garde les fondamentaux comme référence et continue d'analyser tes défaites.</p>
+          {% endif %}
+          <div class="level-counts">
+            {% if recs.counts.critique %}<span class="badge badge-critique">{{ recs.counts.critique }} priorité{{ recs.counts.critique|pluralize }} 1</span>{% endif %}
+            {% if recs.counts.important %}<span class="badge badge-important">{{ recs.counts.important }} priorité{{ recs.counts.important|pluralize }} 2</span>{% endif %}
+            {% if recs.counts.conseil %}<span class="badge badge-conseil">{{ recs.counts.conseil }} à surveiller</span>{% endif %}
+            {% if recs.strengths %}<span class="badge badge-win">{% icon "star" %} {{ recs.strengths|length }} point{{ recs.strengths|length|pluralize }} fort{{ recs.strengths|length|pluralize }}</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="findings">
+        {% for f in recs.findings %}
+        <details class="card finding {{ f.level }}" id="constat-{{ f.id }}" {% if forloop.counter <= 2 %}open{% endif %} style="animation-delay: {{ forloop.counter0 }}0ms">
+          <summary>
+            <span class="finding-icon">{% icon f.id|finding_icon %}</span>
+            <div>
+              <div class="row row-tight" style="margin-bottom:.2rem"><span class="badge badge-{{ f.level }}">{{ f.level|level_label }}</span></div>
+              <h3>{{ f.title }}</h3>
+              <p class="finding-text">{{ f.finding }}</p>
+            </div>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-next"></use></svg>
+          </summary>
+          <div class="finding-body">
+            {% if f.actions %}
+            <div>
+              <h4>Ce que tu peux faire</h4>
+              <ul class="todo">{% for a in f.actions %}<li>{% icon "check" %}<span>{{ a }}</span></li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+            {% if f.examples %}
+            <div>
+              <h4>Revoir dans tes parties</h4>
+              <div class="chips">{% for ex in f.examples %}{% include "analyzer/_example_chip.html" %}{% endfor %}</div>
+            </div>
+            {% endif %}
+            {% if f.training_items %}
+            <div>
+              <h4>Entraînement associé</h4>
+              <div class="train-tags">{% for t in f.training_items %}<a class="chip" href="#plan-{{ t.id }}" data-jump-plan>{% icon t.id|training_icon %} {{ t.title }}</a>{% endfor %}</div>
+            </div>
+            {% endif %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </div>
+
+    <aside class="coach-aside">
+      <div class="card" id="plan" data-plan="{{ export.pk }}">
+        <div class="card-title">{% icon "target" %}<h3>Plan d'entraînement</h3><span class="spacer"></span>
+          <button type="button" class="btn btn-ghost btn-small" data-plan-reset title="Tout décocher">{% icon "refresh" %}</button></div>
+        <div class="plan-progress"><div class="progress"><span data-plan-bar style="width:0%"></span></div><span data-plan-count>0 / {{ recs.plan|length }}</span></div>
+        <ol class="plan-list">
+          {% for p in recs.plan %}
+          <li>
+            <label class="plan-item" id="plan-{{ p.id }}">
+              <input type="checkbox" data-plan-item="{{ p.id }}">
+              <span class="plan-check">{% icon "check" %}</span>
+              <span>
+                <span class="plan-title">{% icon p.id|training_icon %} {{ p.title }}</span>
+                <span class="plan-text" style="display:block">{{ p.text }}</span>
+                {% if p.because %}<span class="plan-why" style="display:block">Parce que : {% for c in p.because %}{{ c.title|lower }}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+              </span>
+            </label>
+          </li>
+          {% endfor %}
+        </ol>
+        <p class="faint small" style="margin:.7rem 0 0">Coche au fil de la semaine — enregistré dans ce navigateur.</p>
+      </div>
+
+      {% if recs.strengths %}
+      <div class="card card-good">
+        <div class="card-title">{% icon "trophy" %}<h3>Tes points forts</h3></div>
+        <ul class="strength-list">{% for st in recs.strengths %}<li>{% icon "star" %}<span>{{ st }}</span></li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</section>
 
 {% if e %}
-<!-- Gaffes -->
-<div class="section">
-  <h2>Les gaffes</h2>
+{# ================================================================ ERREURS #}
+<section class="tab-panel section" id="erreurs" role="tabpanel" data-panel="erreurs">
+  <div class="section-head"><h2>{% icon "alert" %} Les gaffes</h2></div>
   <div class="grid grid-3">
     <div class="card">
-      <h3>Qui gaffe en premier ?</h3>
-      <div class="compare">
-        <div class="me"><div class="value">{{ e.first_blunder.me.score|num:0 }} %</div><small>de score quand tu gaffes en premier ({{ e.first_blunder.me.n|default:0 }} parties)</small></div>
-        <div class="opp"><div class="value">{{ e.first_blunder.opp.score|num:0 }} %</div><small>quand c'est l'adversaire ({{ e.first_blunder.opp.n|default:0 }} parties)</small></div>
+      <div class="card-title">{% icon "zap" %}<h3>Qui gaffe en premier ?</h3></div>
+      <div class="row" style="justify-content:space-around;gap:1rem">
+        <div style="text-align:center">
+          <div class="ring ring-sm" style="--p: {{ e.first_blunder.me.score|css_num }}; --col: var(--bad); --size: 84px; --stroke: 8px"><div class="ring-value">{{ e.first_blunder.me.score|num:0 }}%</div></div>
+          <div class="small" style="margin-top:.4rem"><b>Toi d'abord</b><br><span class="muted">{{ e.first_blunder.me.n|default:0 }} parties</span></div>
+        </div>
+        <div style="text-align:center">
+          <div class="ring ring-sm" style="--p: {{ e.first_blunder.opp.score|css_num }}; --col: var(--good); --size: 84px; --stroke: 8px"><div class="ring-value">{{ e.first_blunder.opp.score|num:0 }}%</div></div>
+          <div class="small" style="margin-top:.4rem"><b>L'adversaire d'abord</b><br><span class="muted">{{ e.first_blunder.opp.n|default:0 }} parties</span></div>
+        </div>
       </div>
-      <p class="muted" style="margin-top:.6rem;font-size:.9rem">{{ e.first_blunder.none.n|default:0 }} parties sans grosse gaffe. Ta 1re gaffe arrive en médiane au coup {{ e.first_blunder_move_median|num:0 }}.</p>
+      <p class="muted small" style="margin:.9rem 0 0">Ton score dans chaque cas. {{ e.first_blunder.none.n|default:0 }} parties sans grosse gaffe ; ta 1re gaffe arrive en médiane au coup {{ e.first_blunder_move_median|num:0 }}.</p>
     </div>
     <div class="card">
-      <h3>Par phase de jeu <small class="muted">% de coups gaffés</small></h3>
-      <table class="data">
-        <tr><th>Phase</th><th class="num">Toi</th><th class="num">Adv.</th></tr>
+      <div class="card-title">{% icon "target" %}<h3>Par phase de jeu</h3></div>
+      <div class="duel">
+        {% with mx=e.phases|phase_max %}
         {% for ph, d in e.phases.items %}
-        <tr><td>{{ ph|phase_label }}</td><td class="num"><b>{{ d.blunder_rate|num }} %</b></td><td class="num">{{ d.opp_blunder_rate|num }} %</td></tr>
+        <div class="duel-row">
+          <div class="duel-label"><span>{{ ph|phase_label }}</span><span class="small"><b>{{ d.blunder_rate|num }} %</b> <span class="faint">/ {{ d.opp_blunder_rate|num }} %</span></span></div>
+          <div class="duel-bars">
+            <div class="bar-track"><div class="bar-fill me" style="width:{{ d.blunder_rate|default:0|pct_width:mx }}%"></div></div>
+            <div class="bar-track"><div class="bar-fill opp" style="width:{{ d.opp_blunder_rate|default:0|pct_width:mx }}%"></div></div>
+          </div>
+        </div>
         {% endfor %}
-      </table>
-      <p class="muted" style="margin-top:.6rem;font-size:.9rem">{{ e.lost_from_equal }} défaites sur {{ e.n_losses }} : tu étais égal ou mieux avant ta première gaffe.</p>
+        {% endwith %}
+      </div>
+      <div class="legend-dots" style="margin-top:.8rem"><span style="--c:var(--accent)">toi</span><span style="--c:var(--border-strong)">adversaires</span><span>% de coups gaffés</span></div>
+      <p class="muted small" style="margin:.6rem 0 0">{{ e.lost_from_equal }} défaites sur {{ e.n_losses }} : tu étais égal ou mieux avant ta première gaffe.</p>
     </div>
     <div class="card">
-      <h3>Ce que tu perds après une gaffe</h3>
-      <p class="muted" style="font-size:.9rem">{{ e.hanging_share|num:0 }} % de tes gaffes laissent prendre du matériel dès le coup suivant ; {{ e.hanging_other_share|num:0 }} % de ces fois, ce n'est pas la pièce que tu viens de jouer.</p>
+      <div class="card-title">{% icon "eye" %}<h3>Ce que tu perds après une gaffe</h3></div>
+      <p class="muted small">{{ e.hanging_share|num:0 }} % de tes gaffes laissent prendre du matériel dès le coup suivant ; {{ e.hanging_other_share|num:0 }} % de ces fois, ce n'est pas la pièce que tu viens de jouer.</p>
       <div class="bars">
         {% with mx=e.material_lost.0.n %}
         {% for x in e.material_lost %}
         <div class="bar-row"><span>{{ x.piece|piece_plural|capfirst }}</span><div class="bar-track"><div class="bar-fill" style="width:{{ x.n|pct_width:mx }}%"></div></div><span class="n">{{ x.n }}</span></div>
+        {% empty %}<p class="faint small">Aucune pièce perdue directement.</p>
         {% endfor %}
         {% endwith %}
       </div>
-      <p class="muted" style="margin-top:.6rem;font-size:.9rem">+ {{ e.allowed_mates }} coups qui ont permis un mat forcé.</p>
+      <p class="muted small" style="margin:.7rem 0 0">+ {{ e.allowed_mates }} coup{{ e.allowed_mates|pluralize }} qui ont permis un mat forcé.</p>
     </div>
   </div>
   {% if e.motifs %}
   <div class="card" style="margin-top:1rem">
-    <h3>Erreurs répétées à l'identique</h3>
-    <div class="examples">{% for m in e.motifs %}<span class="chip">{{ m.move|san }} → {{ m.reply|san }} · {{ m.n }} fois</span>{% endfor %}</div>
+    <div class="card-title">{% icon "repeat" %}<h3>Erreurs répétées à l'identique</h3></div>
+    <div class="chips">{% for m in e.motifs %}<a class="chip" href="{% url 'analyzer:game_detail' m.game_ids.0 %}"><span class="mono">{{ m.move|san }} → {{ m.reply|san }}</span><span class="chip-loss">× {{ m.n }}</span></a>{% endfor %}</div>
   </div>
   {% endif %}
-</div>
 
-<!-- Occasions -->
-<div class="section">
-  <h2>Occasions manquées et conversion</h2>
+  <div class="section-head section"><h2>{% icon "trophy" %} Occasions manquées et conversion</h2></div>
   <div class="grid grid-4">
-    <div class="stat"><div class="value v-loss">{{ e.missed_mate_games.n }}</div><div class="label">parties avec un mat en ≤ 3 coups non joué · {{ e.missed_mates_1 }} fois un mat en 1 laissé passer</div></div>
-    <div class="stat"><div class="value v-loss">{{ e.unpunished_share|num:0 }} %</div><div class="label">des gaffes adverses non punies ({{ e.unpunished }} sur {{ e.n_opp_blunders }})</div></div>
-    <div class="stat"><div class="value">{{ e.conversion_rate|num:0 }} %</div><div class="label">de positions gagnantes converties ({{ e.winning.win }} / {{ e.winning.n }} ; {{ e.winning.loss }} perdues, {{ e.winning.draw }} nulles)</div></div>
-    <div class="stat"><div class="value v-win">{{ e.saved }}</div><div class="label">parties perdues sauvées ({{ e.losing.win }} victoires, {{ e.losing.draw }} nulles){% if e.stalemates_while_winning %} · {{ e.stalemates_while_winning|length }} pat(s) en gagnant{% endif %}</div></div>
-  </div>
-  <div class="grid grid-4" style="margin-top:1rem">
-    <div class="stat"><div class="value">{{ e.accuracy|num }}</div><div class="label">précision moyenne (adversaires : {{ e.opp_accuracy|num }})</div></div>
-    <div class="stat"><div class="value">{{ e.eval10_median|signed:1 }}</div><div class="label">évaluation médiane après 10 coups ({{ e.eval10_ahead|num:0 }} % à +1 ou mieux, {{ e.eval10_behind|num:0 }} % à −1 ou pire)</div></div>
-    <div class="stat"><div class="value">{{ e.castle_move_median|num:0 }}</div><div class="label">coup médian du roque · score {{ e.castled.score|num:0 }} % en roquant, {{ e.not_castled.score|num:0 }} % sans</div></div>
+    <div class="stat"><div class="stat-top">{% icon "crown" %} Mats manqués</div><div class="value v-bad">{{ e.missed_mate_games.n }}</div><div class="label">parties avec un mat en ≤ 3 coups non joué · {{ e.missed_mates_1 }} fois un mat en 1</div></div>
+    <div class="stat"><div class="stat-top">{% icon "gift" %} Cadeaux non punis</div><div class="value v-bad">{{ e.unpunished_share|num:0 }}<small> %</small></div><div class="label">des gaffes adverses ({{ e.unpunished }} sur {{ e.n_opp_blunders }})</div></div>
+    <div class="stat"><div class="stat-top">{% icon "trophy" %} Conversion</div><div class="value">{{ e.conversion_rate|num:0 }}<small> %</small></div><div class="label">positions gagnantes converties ({{ e.winning.win }} / {{ e.winning.n }} ; {{ e.winning.loss }} perdues, {{ e.winning.draw }} nulles)</div></div>
+    <div class="stat"><div class="stat-top">{% icon "shield" %} Sauvetages</div><div class="value v-good">{{ e.saved }}</div><div class="label">parties perdues sauvées ({{ e.losing.win }} V, {{ e.losing.draw }} N){% if e.stalemates_while_winning %} · {{ e.stalemates_while_winning|length }} pat(s) en gagnant{% endif %}</div></div>
+    <div class="stat"><div class="stat-top">{% icon "target" %} Précision</div><div class="value">{{ e.accuracy|num }}</div><div class="label">en moyenne (adversaires : {{ e.opp_accuracy|num }})</div></div>
+    <div class="stat"><div class="stat-top">{% icon "book" %} Sortie d'ouverture</div><div class="value">{{ e.eval10_median|signed:1 }}</div><div class="label">éval. médiane après 10 coups ({{ e.eval10_ahead|num:0 }} % à +1 ou mieux, {{ e.eval10_behind|num:0 }} % à −1 ou pire)</div></div>
+    <div class="stat"><div class="stat-top">{% icon "king" %} Roque</div><div class="value">{{ e.castle_move_median|num:0 }}<small>e coup</small></div><div class="label">en médiane · score {{ e.castled.score|num:0 }} % en roquant, {{ e.not_castled.score|num:0 }} % sans</div></div>
     {% if e.clock_games %}
-    <div class="stat"><div class="value">{{ e.time_trouble_share|num:0 }} %</div><div class="label">de tes erreurs jouées avec moins de 30 s</div></div>
+    <div class="stat"><div class="stat-top">{% icon "clock" %} Zeitnot</div><div class="value">{{ e.time_trouble_share|num:0 }}<small> %</small></div><div class="label">de tes erreurs jouées avec moins de 30 s</div></div>
     {% else %}
-    <div class="stat"><div class="value">{{ b.lost_on_time }}</div><div class="label">défaite(s) au temps · {{ b.won_on_time }} victoire(s) au temps</div></div>
+    <div class="stat"><div class="stat-top">{% icon "clock" %} Au temps</div><div class="value">{{ b.lost_on_time }}</div><div class="label">défaite(s) au temps · {{ b.won_on_time }} victoire(s) au temps</div></div>
     {% endif %}
   </div>
-</div>
+</section>
 {% endif %}
 
-<!-- Ouvertures -->
-<div class="section">
-  <h2>Ouvertures</h2>
+{# ================================================================ OUVERTURES #}
+<section class="tab-panel section" id="ouvertures" role="tabpanel" data-panel="ouvertures">
+  <div class="section-head">
+    <h2>{% icon "book" %} Ouvertures</h2>
+    <span class="spacer"></span>
+    <div class="legend-dots"><span style="--c:var(--bad)">≥ 4 parties et ≤ 40 %</span><span style="--c:var(--good)">≥ 60 %</span></div>
+  </div>
   <div class="card table-wrap">
     <table class="data">
-      <tr><th>Couleur</th><th>Ouverture</th><th class="num">Parties</th><th class="num">V / N / D</th><th class="num">Score</th>{% if e %}<th class="num">Éval. coup 10</th>{% endif %}</tr>
+      <thead><tr><th>Ouverture</th><th class="num">Parties</th><th>V / N / D</th><th class="num">Score</th>{% if e %}<th class="num" title="Évaluation médiane après 10 coups, en pions, de ton point de vue">Éval. coup 10</th>{% endif %}</tr></thead>
+      <tbody>
       {% for r in s.openings|slice:":25" %}
       <tr class="{% if r.weak %}weak{% elif r.strong %}strong{% endif %}">
-        <td>{{ r.color|color_label }}</td><td>{{ r.name }}</td><td class="num">{{ r.n }}</td>
-        <td class="num">{{ r.win }} / {{ r.draw }} / {{ r.loss }}</td><td class="num"><b>{{ r.score|num:0 }} %</b></td>
-        {% if e %}<td class="num">{{ r.eval10|signed:1 }}</td>{% endif %}
+        <td><span class="side side-{{ r.color }}" title="{{ r.color|color_label }}"></span>{{ r.name }}</td>
+        <td class="num">{{ r.n }}</td>
+        <td><div class="row row-tight" style="flex-wrap:nowrap"><div class="wdl wdl-sm"><span class="w" style="flex:{{ r.win }}"></span><span class="d" style="flex:{{ r.draw }}"></span><span class="l" style="flex:{{ r.loss }}"></span></div><span class="faint small tabular">{{ r.win }}/{{ r.draw }}/{{ r.loss }}</span></div></td>
+        <td class="num"><div class="score-cell"><b>{{ r.score|num:0 }} %</b><div class="meter {{ r.score|score_tone }}"><span style="width:{{ r.score|clamp_pct|css_num }}%"></span></div></div></td>
+        {% if e %}<td class="num {% if r.eval10 is not None and r.eval10 < -0.5 %}v-bad{% elif r.eval10 is not None and r.eval10 > 0.5 %}v-good{% endif %}">{{ r.eval10|signed:1 }}</td>{% endif %}
       </tr>
       {% endfor %}
+      </tbody>
     </table>
-    <p class="faint" style="font-size:.85rem;margin:.6rem 0 0">Rouge : au moins 4 parties et 40 % ou moins · vert : 60 % ou plus. Éval. en pions, de ton point de vue (médiane).</p>
   </div>
   {% if s.repeated_losses %}
   <div class="card" style="margin-top:1rem">
-    <h3>Séquences perdues plusieurs fois à l'identique</h3>
+    <div class="card-title">{% icon "repeat" %}<h3>Séquences perdues plusieurs fois à l'identique</h3></div>
+    <div class="table-wrap">
     <table class="data">
       {% for r in s.repeated_losses %}
-      <tr><td>{{ r.color|color_label }}</td><td style="font-family:var(--mono)">{{ r.moves|line }}</td><td class="num">{{ r.losses }} défaites / {{ r.n }}</td>
-        <td>{% for gid in r.game_ids|slice:":3" %}<a class="chip" href="{% url 'analyzer:game_detail' gid %}">voir</a> {% endfor %}</td></tr>
+      <tr><td class="nowrap"><span class="side side-{{ r.color }}"></span>{{ r.color|color_label }}</td><td class="mono small">{{ r.moves|line }}</td><td class="num"><span class="badge badge-loss">{{ r.losses }} défaites / {{ r.n }}</span></td>
+        <td class="nowrap">{% for gid in r.game_ids|slice:":3" %}<a class="chip" href="{% url 'analyzer:game_detail' gid %}">{% icon "eye" %} voir</a> {% endfor %}</td></tr>
       {% endfor %}
     </table>
+    </div>
   </div>
   {% endif %}
-</div>
+</section>
 
-<!-- Habitudes -->
-<div class="section">
-  <h2>Habitudes de jeu</h2>
+{# ================================================================ PROGRESSION #}
+<section class="tab-panel section" id="progression" role="tabpanel" data-panel="progression">
+  {% if tcinfo.elo_series %}
+  <div class="card">
+    <div class="card-title">{% icon "chart" %}<h3>Évolution de l'Elo <span class="muted" style="font-weight:500">· {{ tc_labels|get:b.main_time_class }}</span></h3>
+      <span class="spacer"></span><span class="small muted">{{ tcinfo.elo_start }} → <b style="color:var(--text)">{{ tcinfo.elo_end }}</b></span></div>
+    <div class="chart-box" id="elo-chart"></div>
+    {{ tcinfo.elo_series|json_script:"elo-data" }}
+  </div>
+  {% endif %}
+  <div class="grid grid-2" style="margin-top:1rem">
+    <div class="card table-wrap">
+      <div class="card-title">{% icon "calendar" %}<h3>Mois par mois</h3></div>
+      <table class="data">
+        <thead><tr><th>Mois</th><th class="num">Parties</th><th class="num">Score</th><th class="num">Elo</th>{% if e %}<th class="num">Précision</th>{% endif %}</tr></thead>
+        <tbody>{% for m in b.months %}<tr><td>{{ m.month }}</td><td class="num">{{ m.n }}</td>
+          <td class="num"><div class="score-cell">{{ m.score|num:0 }} %<div class="meter {{ m.score|score_tone }}"><span style="width:{{ m.score|clamp_pct|css_num }}%"></span></div></div></td>
+          <td class="num">{{ m.elo_end|default:"—" }}</td>{% if e %}<td class="num">{{ m.accuracy|num }}</td>{% endif %}</tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <div class="card-title">{% icon "contrast" %}<h3>Par couleur</h3></div>
+        <div class="duel">
+          {% for c in "wb" %}{% with r=b.by_color|get:c %}
+          <div class="duel-row">
+            <div class="duel-label"><span><span class="side side-{{ c }}"></span>{{ c|color_label }} <span class="faint">· {{ r.n }} parties</span></span><b>{{ r.score|num:0 }} %</b></div>
+            <div class="wdl"><span class="w" style="flex:{{ r.win }}"></span><span class="d" style="flex:{{ r.draw }}"></span><span class="l" style="flex:{{ r.loss }}"></span></div>
+          </div>
+          {% endwith %}{% endfor %}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">{% icon "swords" %}<h3>Fins de partie</h3></div>
+        <div class="chips">{% for t in b.terminations %}<span class="chip"><span class="badge badge-{{ t.result }}">{{ t.result|result_label }}</span> {{ t.label }} <b>{{ t.n }}</b></span>{% endfor %}</div>
+        <p class="muted small" style="margin:.8rem 0 0">{{ b.avg_moves|num:0 }} coups par partie en moyenne{% if b.avg_opp_elo_diff is not None %} · adversaires {{ b.avg_opp_elo_diff|signed:0 }} Elo en moyenne{% endif %}.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ================================================================ HABITUDES #}
+<section class="tab-panel section" id="habitudes" role="tabpanel" data-panel="habitudes">
   <div class="grid grid-3">
     <div class="card">
-      <h3>Rang dans la journée</h3>
-      <table class="data">
-        <tr><th>Partie</th><th class="num">Nb</th><th class="num">Score</th></tr>
-        {% for r in s.habits.game_rank %}<tr><td>{{ r.label }}</td><td class="num">{{ r.n }}</td><td class="num">{{ r.score|num:0 }} %</td></tr>{% endfor %}
-      </table>
-      <p class="muted" style="font-size:.9rem;margin-top:.5rem">{{ s.habits.games_per_day|num }} parties par jour joué en moyenne.</p>
-    </div>
-    <div class="card">
-      <h3>Après un résultat</h3>
-      <table class="data">
-        <tr><th>Partie précédente</th><th class="num">Nb</th><th class="num">Score</th></tr>
-        {% for k, v in s.habits.after_result.items %}<tr><td>{{ k|result_label }}</td><td class="num">{{ v.n }}</td><td class="num">{{ v.score|num:0 }} %</td></tr>{% endfor %}
-      </table>
-      <h3 style="margin-top:1rem">Moment de la journée</h3>
-      <table class="data">
-        {% for h in s.habits.hours %}<tr><td>{{ h.label }}</td><td class="num">{{ h.n }}</td><td class="num">{{ h.score|num:0 }} %</td></tr>{% endfor %}
-      </table>
-    </div>
-    <div class="card">
-      <h3>Mois par mois</h3>
-      <table class="data">
-        <tr><th>Mois</th><th class="num">Nb</th><th class="num">Score</th><th class="num">Elo</th>{% if e %}<th class="num">Préc.</th>{% endif %}</tr>
-        {% for m in b.months %}<tr><td>{{ m.month }}</td><td class="num">{{ m.n }}</td><td class="num">{{ m.score|num:0 }} %</td><td class="num">{{ m.elo_end|default:"—" }}</td>{% if e %}<td class="num">{{ m.accuracy|num }}</td>{% endif %}</tr>{% endfor %}
-      </table>
-    </div>
-  </div>
-  <div class="card" style="margin-top:1rem">
-    <h3>Fins de partie</h3>
-    <div class="examples">{% for t in b.terminations %}<span class="chip"><span class="badge badge-{{ t.result }}">{{ t.result|result_label }}</span> {{ t.label }} · {{ t.n }}</span>{% endfor %}</div>
-  </div>
-</div>
-{% endwith %}{% endwith %}
-{% endif %}
-
-<!-- Fondamentaux -->
-<div class="section fundamentals">
-  <h2>Les fondamentaux à garder en tête</h2>
-  <p class="section-intro">Conseils techniques génériques, valables quelle que soit l'analyse.</p>
-  {% for f in recs.fundamentals %}
-  <details {% if forloop.first %}open{% endif %}><summary>{{ f.title }}</summary><ul>{% for it in f.items %}<li>{{ it }}</li>{% endfor %}</ul></details>
-  {% endfor %}
-</div>
-
-<div class="section card">
-  <h3>Réglages de l'export</h3>
-  <form method="post" action="{% url 'analyzer:export_settings' export.pk %}">{% csrf_token %}
-    <div class="grid grid-2">
-      <div class="field"><label>Nom</label><input type="text" name="name" value="{{ export.name }}"></div>
-      {% if export.is_chesscom %}
-      <div class="field"><label>Cadences synchronisées (vide = toutes)</label>
-        <ul style="list-style:none;padding:0;display:flex;gap:1rem;flex-wrap:wrap">
-          <li><label class="checkbox"><input type="checkbox" name="time_classes" value="bullet" {% if "bullet" in export.time_class_list %}checked{% endif %}> Bullet</label></li>
-          <li><label class="checkbox"><input type="checkbox" name="time_classes" value="blitz" {% if "blitz" in export.time_class_list %}checked{% endif %}> Blitz</label></li>
-          <li><label class="checkbox"><input type="checkbox" name="time_classes" value="rapid" {% if "rapid" in export.time_class_list %}checked{% endif %}> Rapide</label></li>
-          <li><label class="checkbox"><input type="checkbox" name="time_classes" value="daily" {% if "daily" in export.time_class_list %}checked{% endif %}> Daily</label></li>
-        </ul>
-        <label class="checkbox" style="margin-top:.5rem"><input type="checkbox" name="auto_analyze" {% if export.auto_analyze %}checked{% endif %}> Analyser automatiquement les nouvelles parties</label>
+      <div class="card-title">{% icon "battery" %}<h3>Rang dans la journée</h3></div>
+      <div class="bars">
+        {% for r in s.habits.game_rank %}
+        <div class="bar-row"><span>{{ r.label }} <span class="faint small">({{ r.n }})</span></span><div class="bar-track"><div class="bar-fill accent" style="width:{{ r.score|clamp_pct|css_num }}%"></div></div><span class="n">{{ r.score|num:0 }}%</span></div>
+        {% endfor %}
       </div>
-      {% endif %}
+      <p class="muted small" style="margin:.8rem 0 0">{{ s.habits.games_per_day|num }} parties par jour joué en moyenne.</p>
     </div>
-    <div class="row">
-      <button class="btn">Enregistrer</button>
-      <div class="spacer"></div>
+    <div class="card">
+      <div class="card-title">{% icon "flame" %}<h3>Après un résultat</h3></div>
+      <div class="bars">
+        {% for k, v in s.habits.after_result.items %}
+        <div class="bar-row"><span>Après {{ k|result_label|lower }} <span class="faint small">({{ v.n }})</span></span><div class="bar-track"><div class="bar-fill accent" style="width:{{ v.score|clamp_pct|css_num }}%"></div></div><span class="n">{{ v.score|num:0 }}%</span></div>
+        {% endfor %}
+      </div>
+      <p class="muted small" style="margin:.8rem 0 0">Ton score sur la partie suivante.</p>
     </div>
-  </form>
-  <form method="post" action="{% url 'analyzer:export_delete' export.pk %}" style="margin-top:.75rem" onsubmit="return confirm('Supprimer cet export et toutes ses analyses ?');">{% csrf_token %}
-    <button class="btn btn-small btn-danger">Supprimer l'export</button>
-  </form>
+    <div class="card">
+      <div class="card-title">{% icon "sun" %}<h3>Moment de la journée</h3></div>
+      <div class="bars">
+        {% for h in s.habits.hours %}
+        <div class="bar-row"><span>{{ h.label }} <span class="faint small">({{ h.n }})</span></span><div class="bar-track"><div class="bar-fill accent" style="width:{{ h.score|clamp_pct|css_num }}%"></div></div><span class="n">{{ h.score|num:0 }}%</span></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endwith %}{% endwith %}
+
+{# ================================================================ FONDAMENTAUX #}
+<section class="tab-panel section" id="fondamentaux" role="tabpanel" data-panel="fondamentaux">
+  <div class="section-head">
+    <div><h2>{% icon "star" %} Les fondamentaux à garder en tête</h2><p class="section-intro">Conseils techniques génériques, valables quelle que soit l'analyse.</p></div>
+  </div>
+  <div class="fundamentals">
+    {% for f in recs.fundamentals %}
+    <details {% if forloop.first %}open{% endif %}><summary><span class="num-badge">{{ forloop.counter }}</span>{{ f.title }}<svg class="icon chev" aria-hidden="true"><use href="#i-next"></use></svg></summary>
+      <ul>{% for it in f.items %}<li>{{ it }}</li>{% endfor %}</ul></details>
+    {% endfor %}
+  </div>
+</section>
+
 </div>
+{% endif %}
 {% endblock %}
-{% block scripts %}<script>ChessCoach.initJobPanel(); ChessCoach.initEloChart();</script>{% endblock %}
+{% block scripts %}<script>ChessCoach.initJobPanel(); ChessCoach.initDashboard();</script>{% endblock %}

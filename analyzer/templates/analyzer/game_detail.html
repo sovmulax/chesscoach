@@ -1,124 +1,164 @@
 {% extends "analyzer/base.html" %}
 {% load chess_extras %}
 {% block title %}{{ game.white }} – {{ game.black }}{% endblock %}
+{% block crumbs %}<a href="{% url 'analyzer:export_list' %}">Mes analyses</a><span class="sep">/</span><a href="{% url 'analyzer:export_detail' export.pk %}">{{ export.name }}</a><span class="sep">/</span><a href="{% url 'analyzer:export_games' export.pk %}">Parties</a><span class="sep">/</span><span class="current">vs {{ game.opponent }}</span>{% endblock %}
 {% block content %}
-<div class="row" style="align-items:flex-start">
-  <div>
-    <p class="muted" style="margin:0"><a href="{% url 'analyzer:export_games' export.pk %}">← {{ export.name }}</a></p>
-    <h1 style="margin-top:.25rem">{{ game.white }} <span class="faint">{{ game.white_elo|default:"" }}</span> – {{ game.black }} <span class="faint">{{ game.black_elo|default:"" }}</span></h1>
-    <p class="muted">
+
+<div class="game-head">
+  <div style="min-width:0">
+    <div class="game-title">
+      <h1><span class="side side-w"></span>{{ game.white }} <span class="elo">{{ game.white_elo|default:"" }}</span> <span class="vs">vs</span> <span class="side side-b"></span>{{ game.black }} <span class="elo">{{ game.black_elo|default:"" }}</span></h1>
       <span class="badge badge-{{ game.player_result }}">{{ game.player_result|result_label }}</span>
-      {{ game.played_at|date:"d/m/Y H:i"|default:game.date }} · {{ tc_labels|get:game.time_class }} ({{ game.time_control }}) · tu joues les {{ game.player_color|color_label }} ·
-      {{ game.opening_name }} · {{ game.termination }}
-      {% if game.url %} · <a href="{{ game.url }}" target="_blank" rel="noopener">voir sur Chess.com</a>{% endif %}
-    </p>
-  </div>
-  <div class="spacer"></div>
-  <div class="row" style="gap:.4rem">
-    {% if prev_id %}<a class="btn btn-small" href="{% url 'analyzer:game_detail' prev_id %}">← Précédente</a>{% endif %}
-    {% if next_id %}<a class="btn btn-small" href="{% url 'analyzer:game_detail' next_id %}">Suivante →</a>{% endif %}
-  </div>
-</div>
-
-<div class="card" id="game-job" data-status-url="{% url 'analyzer:game_status' game.pk %}" data-running="{% if running %}1{% endif %}">
-  <div class="row">
-    <div style="flex:1;min-width:220px">
-      {% if running %}<b>Analyse en cours…</b> <span class="muted">la page se rechargera automatiquement.</span>
-      {% elif game.is_analyzed %}<b>Analysée</b> <span class="muted">avec {{ game.analysis_time|num:2 }} s par position{% if game.stats.accuracy is not None %} · ta précision : <b>{{ game.stats.accuracy|num }}</b> (adversaire {{ game.stats.opp_accuracy|num }}){% endif %}</span>
-      {% else %}<b>Pas encore analysée.</b> <span class="muted">Tu peux déjà rejouer les coups.</span>{% endif %}
-      {% if game.error %}<div class="msg msg-error" style="margin-top:.5rem">{{ game.error }}</div>{% endif %}
     </div>
-    {% if not running %}
-    <form method="post" action="{% url 'analyzer:game_analyze' game.pk %}" class="row" style="gap:.5rem">{% csrf_token %}
-      <select name="analysis_time" style="width:auto">
-        <option value="0.1">Standard (0,1 s)</option>
-        <option value="0.3" selected>Précise (0,3 s)</option>
-        <option value="1">Très précise (1 s)</option>
-      </select>
-      <button class="btn btn-primary" {% if not engine_ok %}disabled title="Stockfish introuvable"{% endif %}>{% if game.is_analyzed %}Réanalyser plus finement{% else %}Analyser cette partie{% endif %}</button>
-    </form>
-    {% endif %}
+    <div class="game-meta">
+      <span class="chip">{% icon "calendar" %} {{ game.played_at|date:"d/m/Y H:i"|default:game.date }}</span>
+      <span class="chip">{% icon "clock" %} {{ tc_labels|get:game.time_class }}{% if game.time_control %} · {{ game.time_control }}{% endif %}</span>
+      <span class="chip"><span class="side side-{{ game.player_color }}" style="margin:0"></span> tu joues les {{ game.player_color|color_label }}</span>
+      {% if game.opening_name %}<span class="chip">{% icon "book" %} {{ game.opening_name }}</span>{% endif %}
+      {% if game.termination %}<span class="chip">{% icon "swords" %} {{ game.termination_kind|term_label|default:game.termination }}</span>{% endif %}
+      {% if game.url %}<a class="chip" href="{{ game.url }}" target="_blank" rel="noopener">{% icon "external" %} Chess.com</a>{% endif %}
+    </div>
+  </div>
+  <span class="spacer"></span>
+  <div class="row row-tight">
+    {% if prev_id %}<a class="btn btn-small" href="{% url 'analyzer:game_detail' prev_id %}" title="Partie précédente">{% icon "arrow-left" %} Précédente</a>{% endif %}
+    {% if next_id %}<a class="btn btn-small" href="{% url 'analyzer:game_detail' next_id %}" title="Partie suivante">Suivante {% icon "arrow-right" %}</a>{% endif %}
   </div>
 </div>
 
-<div class="game-layout section" style="margin-top:1.25rem">
-  <div>
+<div class="card game-status" id="game-job" data-status-url="{% url 'analyzer:game_status' game.pk %}" data-running="{% if running %}1{% endif %}">
+  {% if running %}
+    <span class="badge badge-important"><span class="dot-live"></span> Analyse en cours</span>
+    <span class="muted small">La page se rechargera automatiquement à la fin.</span>
+  {% elif game.is_analyzed %}
+    {% if game.stats.accuracy is not None %}
+    <div class="acc-duel">
+      <div><div class="ring ring-sm" style="--p: {{ game.stats.accuracy|css_num }}; --col: var(--accent)"><div class="ring-value">{{ game.stats.accuracy|num:0 }}</div></div><div class="who">Toi</div></div>
+      <div><div class="ring ring-sm" style="--p: {{ game.stats.opp_accuracy|css_num }}; --col: var(--border-strong)"><div class="ring-value">{{ game.stats.opp_accuracy|num:0 }}</div></div><div class="who">{{ game.opponent }}</div></div>
+    </div>
+    {% endif %}
+    <div>
+      <div><b>Précision</b> <span class="muted small">· analysée avec {{ game.analysis_time|num:2 }} s par position</span></div>
+      <div class="legend-dots" style="margin-top:.35rem">
+        <span style="--c:var(--c-blunder)">{{ game.stats.counts.mine.blunder }} gaffe{{ game.stats.counts.mine.blunder|pluralize }}</span>
+        <span style="--c:var(--c-mistake)">{{ game.stats.counts.mine.mistake }} erreur{{ game.stats.counts.mine.mistake|pluralize }}</span>
+        <span style="--c:var(--c-inaccuracy)">{{ game.stats.counts.mine.inaccuracy }} imprécision{{ game.stats.counts.mine.inaccuracy|pluralize }}</span>
+      </div>
+    </div>
+  {% else %}
+    <span class="badge">{% icon "cpu" %} Pas encore analysée</span>
+    <span class="muted small">Tu peux déjà rejouer les coups.</span>
+  {% endif %}
+  {% if game.error %}<div class="toast toast-error" style="flex-basis:100%">{% icon "alert" %}<span>{{ game.error }}</span></div>{% endif %}
+  {% if not running %}
+  <form method="post" action="{% url 'analyzer:game_analyze' game.pk %}">{% csrf_token %}
+    <select name="analysis_time" class="select-inline" aria-label="Précision de l'analyse">
+      <option value="0.1">Standard (0,1 s)</option>
+      <option value="0.3" selected>Précise (0,3 s)</option>
+      <option value="1">Très précise (1 s)</option>
+    </select>
+    <button class="btn {% if not game.is_analyzed %}btn-primary{% endif %}" {% if not engine_ok %}disabled title="Stockfish introuvable"{% endif %}>
+      {% if game.is_analyzed %}{% icon "refresh" %} Réanalyser plus finement{% else %}{% icon "zap" %} Analyser cette partie{% endif %}</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="game-layout">
+  {# ---------------------------------------------------------------- échiquier #}
+  <div class="board-col">
+    <div class="player-bar" id="bar-top"></div>
     <div class="board-box">
-      {% if game.is_analyzed %}<div class="evalbar" title="Tes chances de gain"><span id="evalbar-fill" style="height:50%"></span></div>{% endif %}
-      <div style="flex:1"><div id="board"></div></div>
+      {% if game.is_analyzed %}<div class="evalbar" id="evalbar" title="Chances de gain (formule Lichess)"><span class="fill"></span><span class="ev-label top"></span><span class="ev-label bottom"></span></div>{% endif %}
+      <div class="board-frame"><div id="board" aria-label="Échiquier" role="img"></div></div>
     </div>
-    <div class="board-controls">
-      <button class="btn btn-small" data-nav="first" title="Début (Origine)">⏮</button>
-      <button class="btn btn-small" data-nav="prev" title="Coup précédent (←)">◀</button>
-      <button class="btn btn-small" data-nav="next" title="Coup suivant (→)">▶</button>
-      <button class="btn btn-small" data-nav="last" title="Fin">⏭</button>
-      <button class="btn btn-small" data-nav="flip" title="Retourner l'échiquier">⇅</button>
+    <div class="player-bar" id="bar-bottom"></div>
+
+    <div class="controls" role="toolbar" aria-label="Navigation dans la partie">
+      <button type="button" class="ctrl" data-nav="first" title="Début (Origine)" aria-label="Début">{% icon "first" %}</button>
+      <button type="button" class="ctrl" data-nav="prev" title="Coup précédent (←)" aria-label="Coup précédent">{% icon "prev" %}</button>
+      <button type="button" class="ctrl primary" data-nav="play" title="Lecture automatique (Espace)" aria-label="Lecture automatique">
+        <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg></button>
+      <button type="button" class="ctrl" data-nav="next" title="Coup suivant (→)" aria-label="Coup suivant">{% icon "next" %}</button>
+      <button type="button" class="ctrl" data-nav="last" title="Fin" aria-label="Fin">{% icon "last" %}</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" class="ctrl" data-nav="flip" title="Retourner l'échiquier (F)" aria-label="Retourner l'échiquier">{% icon "flip" %}</button>
+      {% if game.is_analyzed %}
+      <button type="button" class="ctrl active" data-nav="best" title="Afficher le meilleur coup (B)" aria-label="Afficher le meilleur coup" aria-pressed="true">{% icon "bulb" %}</button>
+      {% endif %}
     </div>
-    {% if game.is_analyzed %}<div class="legend">Flèche colorée : coup joué · flèche verte : meilleur coup selon Stockfish</div>{% endif %}
-    <div class="card move-info" id="move-info"><span class="muted">Utilise les flèches du clavier ou clique sur un coup.</span></div>
-  </div>
-  <div>
     {% if game.is_analyzed %}
-    <div class="card">
-      <h3>Courbe de tes chances de gain</h3>
-      <div id="wp-chart"></div>
+    <div class="controls" style="margin-top:.5rem">
+      <button type="button" class="ctrl ctrl-text" data-nav="prev-key" title="Moment clé précédent (↑)">{% icon "prev" %} Moment clé</button>
+      <button type="button" class="ctrl ctrl-text" data-nav="next-key" title="Moment clé suivant (↓)">Moment clé {% icon "next" %}</button>
     </div>
     {% endif %}
-    <div class="card">
-      <h3>Coups</h3>
-      <div class="movelist" id="movelist"></div>
-    </div>
+    <div class="kbd-hint"><kbd>←</kbd> <kbd>→</kbd> coups · {% if game.is_analyzed %}<kbd>↑</kbd> <kbd>↓</kbd> moments clés · {% endif %}<kbd>Espace</kbd> lecture · <kbd>F</kbd> retourner</div>
+
     {% if game.is_analyzed %}
-    <div class="card">
-      <h3>Bilan des coups</h3>
-      <div class="counts">
-        <span class="h"></span><span class="h">Toi</span><span class="h">Adversaire</span>
-        <span class="t-best">● Meilleurs</span><span class="n">{{ game.stats.counts.mine.best }}</span><span class="n">{{ game.stats.counts.opp.best }}</span>
-        <span class="t-good">● Bons</span><span class="n">{{ game.stats.counts.mine.good }}</span><span class="n">{{ game.stats.counts.opp.good }}</span>
-        <span class="t-inaccuracy">● Imprécisions</span><span class="n">{{ game.stats.counts.mine.inaccuracy }}</span><span class="n">{{ game.stats.counts.opp.inaccuracy }}</span>
-        <span class="t-mistake">● Erreurs</span><span class="n">{{ game.stats.counts.mine.mistake }}</span><span class="n">{{ game.stats.counts.opp.mistake }}</span>
-        <span class="t-blunder">● Gaffes</span><span class="n">{{ game.stats.counts.mine.blunder }}</span><span class="n">{{ game.stats.counts.opp.blunder }}</span>
-      </div>
+    <div class="card chart-card">
+      <div class="card-title">{% icon "chart" %}<h3>Tes chances de gain</h3><span class="spacer"></span>
+        <span class="legend-dots"><span style="--c:var(--c-blunder)">gaffe</span><span style="--c:var(--c-mistake)">erreur</span></span></div>
+      <div class="chart-box" id="wp-chart"></div>
     </div>
     {% endif %}
   </div>
-</div>
 
-{% if game.is_analyzed %}
-<div class="section">
-  <h2>Moments clés</h2>
-  <div class="card">
-    {% for m in key_moments %}
-    <div class="moment" data-goto="{{ m.i|add:1 }}">
-      <span class="badge {% if m.mine %}badge-{% if m.cls == 'blunder' %}critique{% elif m.cls == 'mistake' %}important{% else %}conseil{% endif %}{% else %}badge-conseil{% endif %}">{% if m.mine %}Toi{% else %}Adversaire{% endif %}</span>
-      <div>
-        <div class="moment-title"><span class="t-{{ m.cls }}">{{ m.label }}{{ m.symbol }}</span> — {{ m.cls_label }}{% if m.best and m.best != m.san %} · meilleur : {{ m.best }}{% endif %}</div>
-        <ul>{% for line in m.explain %}<li>{{ line }}</li>{% endfor %}</ul>
-      </div>
+  {# ---------------------------------------------------------------- panneau #}
+  <div class="card panel">
+    <div class="coach-bubble" id="move-info" aria-live="polite"></div>
+    <div class="panel-tabs" role="tablist" data-tabs="game">
+      <button type="button" role="tab" data-tab="moves" aria-selected="true">{% icon "list" %} Coups</button>
+      {% if game.is_analyzed %}
+      <button type="button" role="tab" data-tab="moments" aria-selected="false">{% icon "target" %} Moments clés <span class="count">{{ key_moments|length }}</span></button>
+      <button type="button" role="tab" data-tab="recap" aria-selected="false">{% icon "bulb" %} Bilan</button>
+      {% endif %}
     </div>
-    {% empty %}
-    <p class="muted">Aucune erreur marquante dans cette partie. Bravo !</p>
-    {% endfor %}
-  </div>
-</div>
+    <div class="panel-body panel-scroll">
+      <div data-panel="moves" role="tabpanel"><div class="movelist" id="movelist"></div></div>
 
-<div class="section">
-  <h2>À retenir de cette partie</h2>
-  <div class="card">
-    <ul class="strengths">
-      {% if game.stats.missed_mates %}<li>Tu as laissé passer {{ game.stats.missed_mates }} occasion(s) de mat en 3 coups ou moins : avant chaque coup d'attaque, regarde tous les échecs.</li>{% endif %}
-      {% if game.stats.hanging %}<li>{{ game.stats.hanging }} coup(s) ont laissé du matériel en prise{% if game.stats.hanging_other %} (dont {{ game.stats.hanging_other }} fois une autre pièce que celle jouée : vérifie les menaces adverses){% endif %}.</li>{% endif %}
-      {% if game.stats.allowed_mates %}<li>{{ game.stats.allowed_mates }} coup(s) ont autorisé un mat forcé : regarde les échecs possibles de l'adversaire avant de jouer.</li>{% endif %}
-      {% if game.stats.unpunished %}<li>{{ game.stats.unpunished }} gaffe(s) adverse(s) non punie(s) : après chaque coup adverse, cherche ce qu'il laisse sans défense.</li>{% endif %}
-      {% if game.stats.stalemate_while_winning %}<li>Pat en position gagnante : contre un roi seul, vérifie à chaque coup qu'il lui reste une case.</li>{% endif %}
-      {% if game.stats.max_wp >= 85 and game.player_result != "win" %}<li>Tu as eu une position gagnante ({{ game.stats.max_wp|num:0 }} % de chances) sans la convertir : simplifie et échange quand tu mènes.</li>{% endif %}
-      {% if game.stats.first_own_blunder_move %}<li>Ta première gaffe arrive au coup {{ game.stats.first_own_blunder_move }} ({{ game.stats.first_own_blunder_wp|num:0 }} % de chances avant).</li>{% endif %}
-      {% if game.stats.castled_move %}<li>Roque au coup {{ game.stats.castled_move }}.</li>{% else %}<li>Tu n'as pas roqué dans cette partie.</li>{% endif %}
-      {% if game.stats.eval10 is not None %}<li>Après 10 coups, l'évaluation était de {{ game.stats.eval10|pawns }} (en pions, de ton point de vue).</li>{% endif %}
-    </ul>
+      {% if game.is_analyzed %}
+      <div data-panel="moments" role="tabpanel" hidden>
+        <div class="moments">
+          {% for m in key_moments %}
+          <button type="button" class="moment cls-{{ m.cls }}" data-goto="{{ m.i|add:1 }}">
+            <span class="cls-icon">{{ m.symbol|default:"!" }}</span>
+            <span>
+              <span class="moment-title"><span class="mono">{{ m.label }}{{ m.symbol }}</span> {{ m.cls_label }} <span class="who">{% if m.mine %}toi{% else %}adversaire{% endif %}</span></span>
+              {% if m.explain %}<ul>{% for line in m.explain %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+            </span>
+          </button>
+          {% empty %}
+          <div class="empty">{% icon "trophy" %}<p><b>Aucune erreur marquante.</b></p><p class="small">Bravo, partie propre !</p></div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div data-panel="recap" role="tabpanel" hidden>
+        <div class="counts">
+          <span></span><span class="h">Toi</span><span class="h">Adv.</span>
+          <span class="lbl cls-best"><span class="dot"></span>Meilleurs</span><span class="n me">{{ game.stats.counts.mine.best }}</span><span class="n opp">{{ game.stats.counts.opp.best }}</span>
+          <span class="lbl cls-good"><span class="dot"></span>Bons</span><span class="n me">{{ game.stats.counts.mine.good }}</span><span class="n opp">{{ game.stats.counts.opp.good }}</span>
+          <span class="lbl cls-inaccuracy"><span class="dot"></span>Imprécisions</span><span class="n me">{{ game.stats.counts.mine.inaccuracy }}</span><span class="n opp">{{ game.stats.counts.opp.inaccuracy }}</span>
+          <span class="lbl cls-mistake"><span class="dot"></span>Erreurs</span><span class="n me">{{ game.stats.counts.mine.mistake }}</span><span class="n opp">{{ game.stats.counts.opp.mistake }}</span>
+          <span class="lbl cls-blunder"><span class="dot"></span>Gaffes</span><span class="n me">{{ game.stats.counts.mine.blunder }}</span><span class="n opp">{{ game.stats.counts.opp.blunder }}</span>
+        </div>
+        <h3 style="margin:1.3rem 0 .7rem">À retenir de cette partie</h3>
+        <ul class="takeaways">
+          {% if game.stats.missed_mates %}<li class="bad">{% icon "crown" %}<span>Tu as laissé passer {{ game.stats.missed_mates }} occasion(s) de mat en 3 coups ou moins : avant chaque coup d'attaque, regarde tous les échecs.</span></li>{% endif %}
+          {% if game.stats.hanging %}<li class="bad">{% icon "eye" %}<span>{{ game.stats.hanging }} coup(s) ont laissé du matériel en prise{% if game.stats.hanging_other %} (dont {{ game.stats.hanging_other }} fois une autre pièce que celle jouée : vérifie les menaces adverses){% endif %}.</span></li>{% endif %}
+          {% if game.stats.allowed_mates %}<li class="bad">{% icon "shield" %}<span>{{ game.stats.allowed_mates }} coup(s) ont autorisé un mat forcé : regarde les échecs possibles de l'adversaire avant de jouer.</span></li>{% endif %}
+          {% if game.stats.unpunished %}<li class="bad">{% icon "gift" %}<span>{{ game.stats.unpunished }} gaffe(s) adverse(s) non punie(s) : après chaque coup adverse, cherche ce qu'il laisse sans défense.</span></li>{% endif %}
+          {% if game.stats.stalemate_while_winning %}<li class="bad">{% icon "alert" %}<span>Pat en position gagnante : contre un roi seul, vérifie à chaque coup qu'il lui reste une case.</span></li>{% endif %}
+          {% if game.stats.max_wp >= 85 and game.player_result != "win" %}<li class="bad">{% icon "trophy" %}<span>Tu as eu une position gagnante ({{ game.stats.max_wp|num:0 }} % de chances) sans la convertir : simplifie et échange quand tu mènes.</span></li>{% endif %}
+          {% if game.stats.first_own_blunder_move %}<li>{% icon "zap" %}<span>Ta première gaffe arrive au coup {{ game.stats.first_own_blunder_move }} ({{ game.stats.first_own_blunder_wp|num:0 }} % de chances avant).</span></li>{% endif %}
+          {% if game.stats.castled_move %}<li class="good">{% icon "king" %}<span>Roque au coup {{ game.stats.castled_move }}.</span></li>{% else %}<li>{% icon "king" %}<span>Tu n'as pas roqué dans cette partie.</span></li>{% endif %}
+          {% if game.stats.eval10 is not None %}<li>{% icon "book" %}<span>Après 10 coups, l'évaluation était de {{ game.stats.eval10|pawns }} (en pions, de ton point de vue).</span></li>{% endif %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
   </div>
 </div>
-{% endif %}
 
 {{ payload|json_script:"game-data" }}
 {% endblock %}

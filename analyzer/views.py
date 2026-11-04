@@ -231,12 +231,13 @@ def _game_payload(game):
         moves = game.stats["moves"]
     else:
         plies = engine.positions_without_engine(game.pgn)
-        moves = [{"i": i, "san": p["san"], "uci": p["uci"], "mine": None, "cls": None} for i, p in enumerate(plies[:-1])]
+        moves = [{"i": i, "san": p["san"], "uci": p["uci"], "mine": None, "cls": None, "clock": p.get("clock")}
+                 for i, p in enumerate(plies[:-1])]
     out_moves = []
     for m in moves:
         item = {
             "i": m["i"], "label": move_label(m["i"], m["san"]), "san": display(m["san"]), "uci": m["uci"],
-            "cls": m.get("cls"), "mine": m.get("mine"),
+            "cls": m.get("cls"), "mine": m.get("mine"), "clock": m.get("clock"),
         }
         if m.get("cls"):
             item.update({
@@ -245,7 +246,7 @@ def _game_payload(game):
                 "explain": explain.describe(m),
                 "cls_label": explain.CLASS_LABELS[m["cls"]],
                 "symbol": explain.CLASS_SYMBOLS.get(m["cls"], ""),
-                "clock": m.get("clock"),
+                "phase": explain.PHASE_LABELS.get(m.get("phase"), ""),
             })
         out_moves.append(item)
     return {
@@ -253,8 +254,21 @@ def _game_payload(game):
         "moves": out_moves,
         "wp": game.stats["wp_series"] if game.is_analyzed else None,
         "orientation": game.player_color,
+        "player_color": game.player_color,
+        "players": {
+            "w": {"name": game.white, "elo": game.white_elo},
+            "b": {"name": game.black, "elo": game.black_elo},
+        },
+        "initial_clock": _initial_clock(game.time_control),
+        "key": sorted(game.stats["key_moments"]) if game.is_analyzed else [],
         "pieces": {k: v for k, v in chess.svg.PIECES.items()},
     }
+
+
+def _initial_clock(time_control):
+    """'600+5' -> 600 (secondes) ; parties par correspondance ('1/86400') ou inconnues -> None."""
+    base = (time_control or "").split("+")[0]
+    return int(base) if base.isdigit() else None
 
 
 def game_detail(request, pk):

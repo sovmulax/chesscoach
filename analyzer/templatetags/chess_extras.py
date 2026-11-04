@@ -114,3 +114,91 @@ def level_label(level):
 @register.filter
 def phase_label(p):
     return {"opening": "Ouverture", "middlegame": "Milieu de partie", "endgame": "Finale"}.get(p, p)
+
+
+# ---------------------------------------------------------------------------
+# Présentation : icônes (sprite SVG défini dans _icons.html)
+# ---------------------------------------------------------------------------
+FINDING_ICONS = {
+    "first_blunder": "zap", "lost_from_equal": "alert", "blunder_rate": "alert", "hanging": "eye",
+    "missed_mates": "crown", "unpunished": "gift", "conversion": "trophy", "king_safety": "shield",
+    "motifs": "repeat", "time_trouble": "clock", "late_castle": "shield", "repeated": "repeat",
+    "weak_openings": "book", "timeouts": "clock", "fatigue": "battery", "tilt": "flame",
+    "color_gap": "contrast", "plateau": "chart",
+}
+
+TRAINING_ICONS = {
+    "anti_blunder": "check-circle", "puzzles_hanging": "eye", "puzzles_mate": "crown", "conversion": "trophy",
+    "endgames": "king", "openings": "book", "review": "repeat", "time": "clock", "sessions": "battery",
+    "king_safety": "shield",
+}
+
+
+@register.simple_tag
+def icon(name, extra_class=""):
+    from django.utils.html import format_html
+    return format_html('<svg class="icon {}" aria-hidden="true"><use href="#i-{}"></use></svg>', extra_class, name)
+
+
+@register.filter
+def finding_icon(fid):
+    if fid and fid.startswith("phase_"):
+        return "target"
+    return FINDING_ICONS.get(fid, "bulb")
+
+
+@register.filter
+def training_icon(tid):
+    return TRAINING_ICONS.get(tid, "bulb")
+
+
+@register.filter
+def pct_of(value, total):
+    """Part en % (pour les barres) : 3, 12 -> 25.0"""
+    try:
+        return round(100 * float(value) / float(total), 1) if float(total) else 0
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 0
+
+
+@register.filter
+def clamp_pct(value):
+    """Valeur bornée à 0–100 pour une largeur de barre (None -> 0)."""
+    try:
+        return max(0, min(100, float(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+@register.filter
+def score_tone(score):
+    """Couleur sémantique d'un score en % : good / mid / bad."""
+    try:
+        s = float(score)
+    except (TypeError, ValueError):
+        return "mid"
+    return "good" if s >= 55 else "bad" if s <= 45 else "mid"
+
+
+@register.filter
+def css_num(value):
+    """Nombre au format CSS (point décimal), quelle que soit la locale."""
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "0"
+
+
+@register.filter
+def minus(value, other):
+    try:
+        return value - other
+    except TypeError:
+        return None
+
+
+@register.filter
+def phase_max(phases):
+    """Plus grand taux de gaffes (toi ou adversaires) parmi les phases : échelle commune des barres."""
+    vals = [v for d in (phases or {}).values() for v in (d.get("blunder_rate"), d.get("opp_blunder_rate")) if v]
+    return max(vals) if vals else 1

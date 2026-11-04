@@ -1,25 +1,110 @@
-{% load static %}<!doctype html>
-<html lang="fr">
+{% load static chess_extras %}<!doctype html>
+<html lang="fr" data-mode="auto" data-palette="classique" data-board="bois" data-motion="on">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Chess Coach{% endblock %} · Chess Coach</title>
+<meta name="description" content="Chess Coach : analyse tes parties d'échecs avec Stockfish, en local, et reçois un diagnostic et un plan d'entraînement.">
+{# Applique le thème choisi avant le premier rendu (pas de flash). Préférences stockées dans le navigateur uniquement. #}
+<script>(function(){try{var d=document.documentElement,s=window.localStorage;["mode","palette","board","motion"].forEach(function(k){var v=s.getItem("cc-"+k);if(v)d.setAttribute("data-"+k,v);});}catch(e){}})();</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="{% static 'analyzer/app.css' %}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+{% include "analyzer/_icons.html" %}
+<a class="skip-link" href="#main">Aller au contenu</a>
 <header class="topbar">
-  <a class="brand" href="{% url 'analyzer:export_list' %}"><span class="brand-mark">♞</span> Chess Coach</a>
-  <nav>{% block nav %}{% endblock %}</nav>
+  <div class="topbar-inner">
+    <a class="brand" href="{% url 'analyzer:export_list' %}" aria-label="Chess Coach, accueil">
+      <span class="brand-mark" aria-hidden="true">♞</span>
+      <span class="brand-name">Chess Coach</span>
+    </a>
+    <nav class="crumbs" aria-label="Fil d'Ariane">{% block crumbs %}{% endblock %}</nav>
+    <div class="topbar-actions">
+      <button type="button" class="icon-btn" data-mode-toggle title="Basculer clair / sombre" aria-label="Basculer clair / sombre">
+        <svg class="icon only-light" aria-hidden="true"><use href="#i-moon"></use></svg>
+        <svg class="icon only-dark" aria-hidden="true"><use href="#i-sun"></use></svg>
+      </button>
+      <button type="button" class="btn btn-ghost" data-open-appearance aria-haspopup="dialog" aria-controls="appearance">
+        {% icon "palette" %}<span class="hide-sm">Apparence</span>
+      </button>
+    </div>
+  </div>
 </header>
-<main class="page">
+
+<main class="page" id="main">
   {% if messages %}
-  <div class="messages">
-    {% for m in messages %}<div class="msg msg-{{ m.tags }}">{{ m }}</div>{% endfor %}
+  <div class="toasts" role="status">
+    {% for m in messages %}
+    <div class="toast toast-{{ m.tags }}">
+      {% if m.tags == "success" %}{% icon "check-circle" %}{% elif m.tags == "error" %}{% icon "alert" %}{% else %}{% icon "bulb" %}{% endif %}
+      <span>{{ m }}</span>
+      <button type="button" class="icon-btn icon-btn-sm" data-dismiss aria-label="Fermer">{% icon "x" %}</button>
+    </div>
+    {% endfor %}
   </div>
   {% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="foot">Analyse Stockfish locale · données Chess.com via l'API publique · gaffe = perte ≥ 30 points de chances de gain</footer>
+
+<footer class="foot">
+  <div class="foot-inner">
+    <span><span class="brand-mark brand-mark-sm" aria-hidden="true">♞</span> Chess Coach — analyse Stockfish 100 % locale, tes parties restent sur ta machine.</span>
+    <span class="faint">Gaffe = perte ≥ 30 points de chances de gain · données Chess.com via l'API publique</span>
+    <a href="https://github.com/sovmulax/chesscoach" target="_blank" rel="noopener">{% icon "code" %} Code source</a>
+  </div>
+</footer>
+
+{# Panneau « Apparence » : tout est enregistré dans le navigateur, rien côté serveur. #}
+<div class="drawer-backdrop" data-close-appearance hidden></div>
+<aside class="drawer" id="appearance" role="dialog" aria-modal="true" aria-labelledby="appearance-title" hidden>
+  <div class="drawer-head">
+    <h2 id="appearance-title">{% icon "palette" %} Apparence</h2>
+    <button type="button" class="icon-btn" data-close-appearance aria-label="Fermer">{% icon "x" %}</button>
+  </div>
+  <div class="drawer-body">
+    <section>
+      <h3>Mode</h3>
+      <div class="segmented" role="radiogroup" aria-label="Mode d'affichage">
+        <button type="button" role="radio" data-set="mode" data-value="auto">{% icon "monitor" %} Auto</button>
+        <button type="button" role="radio" data-set="mode" data-value="light">{% icon "sun" %} Clair</button>
+        <button type="button" role="radio" data-set="mode" data-value="dark">{% icon "moon" %} Sombre</button>
+      </div>
+    </section>
+    <section>
+      <h3>Couleurs de l'interface</h3>
+      <div class="swatches" role="radiogroup" aria-label="Palette">
+        {% for key, label in palettes %}
+        <button type="button" role="radio" class="swatch" data-set="palette" data-value="{{ key }}">
+          <span class="swatch-preview" data-palette="{{ key }}"><i></i><i></i><i></i></span>
+          <span>{{ label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </section>
+    <section>
+      <h3>Échiquier</h3>
+      <div class="swatches swatches-board" role="radiogroup" aria-label="Thème de l'échiquier">
+        {% for key, label in boards %}
+        <button type="button" role="radio" class="swatch" data-set="board" data-value="{{ key }}">
+          <span class="board-preview" data-board="{{ key }}"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span>{{ label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </section>
+    <section>
+      <h3>Animations</h3>
+      <label class="switch">
+        <input type="checkbox" data-set-toggle="motion">
+        <span class="switch-track" aria-hidden="true"></span>
+        <span>Animer les pièces et les transitions</span>
+      </label>
+    </section>
+    <p class="faint small">Ces préférences sont enregistrées dans ce navigateur uniquement.</p>
+  </div>
+</aside>
+
 <script src="{% static 'analyzer/app.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body>
