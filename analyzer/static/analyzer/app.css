@@ -865,3 +865,4 @@ a.mode-card:hover { text-decoration: none; transform: translateY(-2px); border-c
 .sprint-flash.on { animation: flashIn .45s ease-out; }
 .sprint-flash.ok { box-shadow: inset 0 0 0 6px var(--c-best); } .sprint-flash.ko { box-shadow: inset 0 0 0 6px var(--c-blunder); }
 @keyframes flashIn { 0% { opacity: 1; } 100% { opacity: 0; } }
+#board.interactive { touch-action: none; }
