@@ -10,8 +10,9 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import AnalyzeForm, ChessComForm, PGNUploadForm
-from .models import Export, Game
-from .services import chesscom, engine, explain, jobs, metrics, pgn_import, recommendations, summary
+from .models import Export, Game, Puzzle
+from .services import (chesscom, engine, explain, jobs, metrics, pgn_import, puzzle_themes, recommendations,
+                       references, summary, training)
 from .services.notation import display, move_label
 
 TIME_CLASS_LABELS = {"bullet": "Bullet", "blitz": "Blitz", "rapid": "Rapide", "daily": "Daily", "?": "Inconnue", "": "Inconnue"}
@@ -121,6 +122,7 @@ def export_detail(request, pk):
     tc = request.GET.get("cadence") or None
     summ, games = get_summary(export, tc)
     recs = recommendations.build(summ) if summ.get("n_games") else None
+    practice = _practice(export, recs) if recs else None
     by_id = {g.id: g for g in games}
     time_classes = (export.games.values("time_class").annotate(n=Count("id")).order_by("-n"))
     ctx = {
@@ -129,10 +131,34 @@ def export_detail(request, pk):
         "analyze_form": AnalyzeForm(initial={"analysis_time": str(export.analysis_time)}),
         "engine_ok": engine.engine_available(),
         "tc_labels": TIME_CLASS_LABELS,
+        "practice": practice,
         **_export_flags(export),
         **_progress(export),
     }
     return render(request, "analyzer/export_detail.html", ctx)
+
+
+def _practice(export, recs):
+    """Pour chaque constat : thèmes d'exercices et parties de référence qui le travaillent (affichage seulement)."""
+    training.ensure_bank()
+    counts = training.theme_counts()
+    level = references.player_level(export)
+    games = references.catalogue()
+    for f in recs["findings"]:
+        f["puzzle_themes"] = [dict(puzzle_themes.info(k), count=counts[k])
+                              for k in puzzle_themes.FINDING_THEMES.get(f["id"], []) if counts.get(k)][:3]
+        wanted = set(references.FINDING_REFS.get(f["id"], []))
+        matches = [g for g in games if wanted & set(g["themes"])]
+        if level:
+            matches.sort(key=lambda g: abs(references.LEVEL_INDEX[g["level"]] - references.LEVEL_INDEX[level]))
+        f["references"] = matches[:2]
+    return {
+        "themes": training.recommended_themes(recs, counts, limit=4),
+        "references": references.recommend(export, recs, limit=2),
+        "n_mine": Puzzle.objects.filter(game__export=export).count(),
+        "job": jobs.puzzle_job_status(export.pk),
+        "rating": training.current_rating(),
+    }
 
 
 def export_games(request, pk):

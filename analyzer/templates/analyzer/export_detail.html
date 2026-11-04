@@ -134,6 +134,15 @@
               <div class="chips">{% for ex in f.examples %}{% include "analyzer/_example_chip.html" %}{% endfor %}</div>
             </div>
             {% endif %}
+            {% if f.puzzle_themes or f.references %}
+            <div>
+              <h4>S'exercer sur ce point</h4>
+              <div class="chips">
+                {% for t in f.puzzle_themes %}<a class="chip" href="{% url 'analyzer:training_play' t.key %}">{% icon t.icon %} Exercices « {{ t.label }} » <span class="faint">{{ t.count }}</span></a>{% endfor %}
+                {% for r in f.references %}<a class="chip" href="{% url 'analyzer:reference_detail' r.slug %}">{% icon "book" %} Partie modèle : {{ r.title }}</a>{% endfor %}
+              </div>
+            </div>
+            {% endif %}
             {% if f.training_items %}
             <div>
               <h4>Entraînement associé</h4>
@@ -147,6 +156,46 @@
     </div>
 
     <aside class="coach-aside">
+      {% if practice %}
+      <div class="card practice-card">
+        <div class="card-title">{% icon "zap" %}<h3>Passe à la pratique</h3><span class="spacer"></span><span class="badge" title="Ton classement aux exercices">{% icon "trophy" %} {{ practice.rating }}</span></div>
+        {% if practice.themes %}
+        <div class="practice-list">
+          {% for t in practice.themes %}
+          <a class="practice-item" href="{% url 'analyzer:training_play' t.key %}">
+            <span class="theme-icon">{% icon t.icon %}</span>
+            <span><b>{{ t.label }}</b><span class="faint small" style="display:block">pour : {{ t.because|lower }}</span></span>
+            {% icon "arrow-right" %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="practice-mine">
+          {% if practice.n_mine %}
+          <a class="btn btn-soft btn-block" href="{% url 'analyzer:training_play' 'mine' %}">{% icon "king" %} Mes {{ practice.n_mine }} positions à retravailler</a>
+          {% else %}
+          <form method="post" action="{% url 'analyzer:training_generate' export.pk %}">{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button class="btn btn-block" {% if not engine_ok or practice.job.running or not s.n_analyzed %}disabled{% endif %}>
+              {% if practice.job.running %}<span class="dot-live"></span> Création des exercices…{% else %}{% icon "zap" %} Transformer mes erreurs en exercices{% endif %}</button>
+          </form>
+          {% endif %}
+        </div>
+        {% if practice.references %}
+        <h4 class="practice-sub">Parties modèles à étudier</h4>
+        <div class="practice-list">
+          {% for r in practice.references %}
+          <a class="practice-item" href="{% url 'analyzer:reference_detail' r.slug %}">
+            <span class="theme-icon">{% icon "book" %}</span>
+            <span><b>{{ r.title }}</b><span class="faint small" style="display:block">{{ r.subtitle }}</span></span>
+            {% icon "arrow-right" %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <div class="card" id="plan" data-plan="{{ export.pk }}">
         <div class="card-title">{% icon "target" %}<h3>Plan d'entraînement</h3><span class="spacer"></span>
           <button type="button" class="btn btn-ghost btn-small" data-plan-reset title="Tout décocher">{% icon "refresh" %}</button></div>

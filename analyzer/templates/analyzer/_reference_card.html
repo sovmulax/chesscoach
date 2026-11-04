@@ -1,0 +1,11 @@
+{% load chess_extras %}<a class="card ref-card" href="{% url 'analyzer:reference_detail' r.slug %}">
+  <div class="row row-tight" style="justify-content:space-between">
+    <span class="badge badge-level-{{ r.level }}">{{ r.level_label }}</span>
+    {% if r.studied or r.study.completed_at %}<span class="badge badge-done">{% icon "check" %} étudiée</span>{% elif r.study.viewed_at %}<span class="badge">commencée</span>{% endif %}
+  </div>
+  <h3>{{ r.title }}</h3>
+  <p class="muted small" style="margin:0">{{ r.subtitle }}</p>
+  <div class="faint small">{% if r.year %}{{ r.white }} – {{ r.black }} · {{ r.year }}{% else %}{{ r.event }}{% endif %} · {{ r.n_moves }} coups</div>
+  {% if r.reasons %}<div class="ref-why">{% icon "bulb" %} Pour : {% for x in r.reasons %}{{ x|lower }}{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+  <div class="chips">{% for t in r.theme_labels|slice:":3" %}<span class="chip">{{ t }}</span>{% endfor %}</div>
+</a>

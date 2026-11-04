@@ -254,3 +254,81 @@ def _run_sync(export_id, full):
     export.refresh_from_db()
     if added and export.auto_analyze and engine_mod.engine_available():
         start_export_analysis(export_id)
+
+
+# ---------------------------------------------------------------------------
+# Exercices tirés des parties d'un export
+# ---------------------------------------------------------------------------
+_puzzle_progress = {}
+
+
+def puzzle_job_status(export_id):
+    return {"running": is_running("puzzles", export_id), "message": _puzzle_progress.get(export_id, "")}
+
+
+def start_puzzle_generation(export_id, limit_games=150, seconds=0.25):
+    _puzzle_progress[export_id] = "Préparation…"
+    return _start("puzzles", export_id, _run_puzzles, export_id, limit_games, seconds)
+
+
+def _run_puzzles(export_id, limit_games=150, seconds=0.25):
+    from . import training
+
+    export = Export.objects.get(pk=export_id)
+    games = training.candidate_games(export, limit_games)
+    if not games:
+        _puzzle_progress[export_id] = "Aucune nouvelle partie analysée à parcourir."
+        return 0
+    try:
+        engine_mod.find_stockfish()
+    except engine_mod.EngineNotFound as exc:
+        _puzzle_progress[export_id] = str(exc)
+        return 0
+
+    local = threading.local()
+    engines, eng_lock = [], threading.Lock()
+
+    def work(game):
+        if not getattr(local, "eng", None):
+            local.eng = engine_mod.open_engine()
+            with eng_lock:
+                engines.append(local.eng)
+        items = []
+        for m in training.game_candidates(game):
+            try:
+                p = training.puzzle_from_mistake(local.eng, game, m, seconds)
+            except chess.engine.EngineTerminatedError:
+                local.eng = engine_mod.open_engine()
+                with eng_lock:
+                    engines.append(local.eng)
+                continue
+            if p:
+                items.append(p)
+        return items
+
+    done = created = 0
+    workers = max(1, min(settings.ANALYSIS_WORKERS, len(games)))
+    _puzzle_progress[export_id] = f"0 / {len(games)} parties parcourues"
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(work, g): g for g in games}
+            for fut in as_completed(futures):
+                game = futures[fut]
+                try:
+                    created += training.save_game_puzzles(game, fut.result())
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Exercices de la partie %s : %s", game.pk, exc)
+                done += 1
+                _puzzle_progress[export_id] = f"{done} / {len(games)} parties parcourues · {created} exercice(s) créé(s)"
+                if ("puzzles", export_id) in _cancel:
+                    for f in futures:
+                        f.cancel()
+                    break
+    finally:
+        for e in engines:
+            try:
+                e.quit()
+            except Exception:  # noqa: BLE001
+                pass
+    _puzzle_progress[export_id] = f"Terminé : {created} exercice(s) créé(s) à partir de {done} partie(s)."
+    return created

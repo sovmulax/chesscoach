@@ -1,0 +1,81 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}Ma progression · Exercices{% endblock %}
+{% block crumbs %}<a href="{% url 'analyzer:training_home' %}">Exercices</a><span class="sep">/</span><span class="current">Ma progression</span>{% endblock %}
+{% block content %}
+<div class="section-head">
+  <div><h1>Ma progression</h1><p class="section-intro">Tous tes résultats sont enregistrés : suis l'évolution de ton classement et de chaque thème.</p></div>
+  <span class="spacer"></span>
+  <a class="btn btn-primary" href="{% url 'analyzer:training_play' 'mix' %}">{% icon "play" %} S'entraîner</a>
+</div>
+
+<div class="grid grid-4">
+  <div class="stat"><div class="stat-top">{% icon "trophy" %} Classement</div><div class="value">{{ ov.rating }}</div><div class="label">départ : {{ ov.history.0|default:ov.rating }}</div></div>
+  <div class="stat"><div class="stat-top">{% icon "target" %} Exercices</div><div class="value">{{ ov.attempts }}</div><div class="label">{{ ov.solved }} réussis du premier coup</div></div>
+  <div class="stat"><div class="stat-top">{% icon "check-circle" %} Réussite</div><div class="value">{{ ov.rate|default_if_none:"—" }}{% if ov.rate is not None %}<small> %</small>{% endif %}</div><div class="label">sans indice ni erreur</div></div>
+  <div class="stat"><div class="stat-top">{% icon "flame" %} Série</div><div class="value">{{ ov.streak }}</div><div class="label">réussis d'affilée · {{ ov.to_review }} à réviser</div></div>
+</div>
+
+{% if ov.history|length > 1 %}
+<div class="card section">
+  <div class="card-title">{% icon "chart" %}<h3>Évolution du classement</h3></div>
+  <div class="chart-box" id="rating-chart"></div>
+  {{ ov.history|json_script:"rating-data" }}
+</div>
+{% endif %}
+
+{% if strong or weak %}
+<div class="grid grid-2 section">
+  {% if weak %}<div class="card"><div class="card-title">{% icon "alert" %}<h3>Thèmes à travailler</h3></div>
+    <ul class="strength-list">{% for r in weak %}<li>{% icon r.icon %}<span><a href="{% url 'analyzer:training_play' r.key %}"><b>{{ r.label }}</b></a> — {{ r.rate }} % de réussite sur {{ r.n }} essais</span></li>{% endfor %}</ul></div>{% endif %}
+  {% if strong %}<div class="card card-good"><div class="card-title">{% icon "trophy" %}<h3>Tes meilleurs thèmes</h3></div>
+    <ul class="strength-list">{% for r in strong %}<li>{% icon "star" %}<span><b>{{ r.label }}</b> — {{ r.rate }} % de réussite sur {{ r.n }} essais</span></li>{% endfor %}</ul></div>{% endif %}
+</div>
+{% endif %}
+
+<div class="card table-wrap section">
+  <div class="card-title" style="padding:.6rem .4rem 0">{% icon "list" %}<h3>Par thème</h3></div>
+  {% if rows %}
+  <table class="data">
+    <thead><tr><th>Thème</th><th class="num">Essais</th><th>Réussite</th><th class="num" title="Performance : niveau moyen des exercices ajusté par tes résultats">Performance</th><th class="num">Temps moyen</th><th>Dernier essai</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><span class="row row-tight" style="flex-wrap:nowrap">{% icon r.icon %} <b>{{ r.label }}</b></span></td>
+      <td class="num">{{ r.n }}</td>
+      <td><div class="score-cell" style="justify-content:flex-start"><b class="tabular">{{ r.rate }} %</b><div class="meter {% if r.rate >= 70 %}good{% elif r.rate < 45 %}bad{% else %}mid{% endif %}"><span style="width:{{ r.rate|clamp_pct|css_num }}%"></span></div></div></td>
+      <td class="num">{{ r.perf|default_if_none:"—" }}</td>
+      <td class="num">{% if r.seconds %}{{ r.seconds }} s{% else %}—{% endif %}</td>
+      <td class="muted">{{ r.last|date:"d/m/Y" }}</td>
+      <td class="num"><a class="btn btn-small btn-soft" href="{% url 'analyzer:training_play' r.key %}">{% icon "play" %} S'entraîner</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">{% icon "target" %}<p>Pas encore de résultat : lance-toi !</p></div>
+  {% endif %}
+</div>
+
+{% if recent %}
+<div class="card table-wrap section">
+  <div class="card-title" style="padding:.6rem .4rem 0">{% icon "calendar" %}<h3>Derniers exercices</h3></div>
+  <table class="data">
+    <thead><tr><th>Date</th><th>Résultat</th><th>Thèmes</th><th class="num">Difficulté</th><th class="num">Classement</th><th></th></tr></thead>
+    <tbody>
+    {% for a in recent %}
+    <tr>
+      <td class="muted nowrap">{{ a.created_at|date:"d/m H:i" }}</td>
+      <td>{% if a.solved %}<span class="badge badge-win">{% icon "check" %} Réussi</span>{% else %}<span class="badge badge-loss">{% icon "x" %} Raté</span>{% endif %}{% if a.used_hint %} <span class="badge">indice</span>{% endif %}</td>
+      <td class="muted small">{{ a.theme_labels|join:" · " }}</td>
+      <td class="num">{{ a.puzzle_rating|default:"—" }}</td>
+      <td class="num"><b>{{ a.rating_after }}</b> {% with d=a.rating_after|minus:a.rating_before %}<span class="delta {% if d >= 0 %}up{% else %}down{% endif %}">{{ d|signed:0 }}</span>{% endwith %}</td>
+      <td class="num"><a class="btn btn-small btn-ghost" href="{% url 'analyzer:training_play' 'mix' %}?id={{ a.puzzle_id }}">{% icon "refresh" %} Rejouer</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>ChessCoach.initRatingChart();</script>{% endblock %}

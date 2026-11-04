@@ -26,3 +26,10 @@ BOARDS = [
 
 def appearance(request):
     return {"palettes": PALETTES, "boards": BOARDS}
+
+
+def navigation(request):
+    """Rubrique active de la barre du haut."""
+    name = getattr(getattr(request, "resolver_match", None), "url_name", "") or ""
+    section = "exercices" if name.startswith("training") else "references" if name.startswith("reference") else "analyses"
+    return {"nav_section": section}

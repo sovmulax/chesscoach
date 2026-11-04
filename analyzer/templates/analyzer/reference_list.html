@@ -1,0 +1,53 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}Parties de référence{% endblock %}
+{% block content %}
+<section class="train-hero">
+  <div>
+    <span class="eyebrow">{% icon "book" %} Parties de référence</span>
+    <h1>Apprends des parties modèles</h1>
+    <p class="hero-lead">Des parties célèbres et des positions types, commentées coup par coup. Choisies selon ton niveau et les faiblesses repérées dans tes parties, à rejouer en mode « devine le coup ».</p>
+  </div>
+  <div class="card">
+    <div class="kpi-label">Ton niveau estimé</div>
+    <div class="rating-value" style="font-size:1.6rem">{% if player_level %}{% for k, l in levels %}{% if k == player_level %}{{ l }}{% endif %}{% endfor %}{% else %}—{% endif %}</div>
+    <p class="muted small" style="margin:.3rem 0 .8rem">{% if export %}D'après l'Elo et le diagnostic de « {{ export.name }} ».{% else %}Importe tes parties pour des recommandations personnalisées.{% endif %}</p>
+    {% if exports|length > 1 %}
+    <form method="get" class="row row-tight">
+      <select name="export" class="select-inline" aria-label="Export utilisé pour les recommandations" onchange="this.form.submit()">
+        {% for e in exports %}<option value="{{ e.pk }}" {% if export and e.pk == export.pk %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
+      </select>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+{% if recommended and not level and not theme %}
+<section class="section">
+  <div class="section-head"><div><h2>{% icon "bulb" %} Recommandées pour toi</h2>
+    <p class="section-intro">Elles illustrent la bonne façon de jouer là où tu perds des points.</p></div></div>
+  <div class="grid grid-2">{% for r in recommended %}{% include "analyzer/_reference_card.html" %}{% endfor %}</div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>{% icon "list" %} Toutes les parties</h2>
+    <span class="spacer"></span>
+    <nav class="segmented" aria-label="Filtrer par niveau">
+      <a href="?{% if theme %}theme={{ theme }}{% endif %}" class="{% if not level %}active{% endif %}">Tous niveaux</a>
+      {% for k, l in levels %}<a href="?niveau={{ k }}{% if theme %}&amp;theme={{ theme }}{% endif %}" class="{% if level == k %}active{% endif %}">{{ l }}</a>{% endfor %}
+    </nav>
+  </div>
+  <div class="chips" style="margin-bottom:1rem">
+    <a class="chip {% if not theme %}chip-active{% endif %}" href="?{% if level %}niveau={{ level }}{% endif %}">Tous les thèmes</a>
+    {% for k, l in themes.items %}<a class="chip {% if theme == k %}chip-active{% endif %}" href="?theme={{ k }}{% if level %}&amp;niveau={{ level }}{% endif %}">{{ l }}</a>{% endfor %}
+  </div>
+  {% if items %}
+  <div class="grid grid-3">{% for r in items %}{% include "analyzer/_reference_card.html" %}{% endfor %}</div>
+  {% else %}
+  <div class="card empty">{% icon "search" %}<p>Aucune partie pour ce filtre.</p></div>
+  {% endif %}
+</section>
+<p class="faint small section">{% icon "code" %} Le catalogue se trouve dans <code>analyzer/data/reference_games.json</code> : ajoute tes parties préférées et leurs commentaires (elles sont vérifiées automatiquement au chargement).</p>
+{% endblock %}

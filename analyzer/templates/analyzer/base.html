@@ -19,7 +19,11 @@
       <span class="brand-mark" aria-hidden="true">♞</span>
       <span class="brand-name">Chess Coach</span>
     </a>
-    <nav class="crumbs" aria-label="Fil d'Ariane">{% block crumbs %}{% endblock %}</nav>
+    <nav class="mainnav" aria-label="Navigation principale">
+      <a href="{% url 'analyzer:export_list' %}" class="{% if nav_section == 'analyses' %}active{% endif %}" {% if nav_section == 'analyses' %}aria-current="page"{% endif %}>{% icon "chart" %}<span>Analyses</span></a>
+      <a href="{% url 'analyzer:training_home' %}" class="{% if nav_section == 'exercices' %}active{% endif %}" {% if nav_section == 'exercices' %}aria-current="page"{% endif %}>{% icon "target" %}<span>Exercices</span></a>
+      <a href="{% url 'analyzer:reference_list' %}" class="{% if nav_section == 'references' %}active{% endif %}" {% if nav_section == 'references' %}aria-current="page"{% endif %}>{% icon "book" %}<span>Parties de référence</span></a>
+    </nav>
     <div class="topbar-actions">
       <button type="button" class="icon-btn" data-mode-toggle title="Basculer clair / sombre" aria-label="Basculer clair / sombre">
         <svg class="icon only-light" aria-hidden="true"><use href="#i-moon"></use></svg>
@@ -33,6 +37,7 @@
 </header>
 
 <main class="page" id="main">
+  <nav class="crumbs" aria-label="Fil d'Ariane">{% block crumbs %}{% endblock %}</nav>
   {% if messages %}
   <div class="toasts" role="status">
     {% for m in messages %}

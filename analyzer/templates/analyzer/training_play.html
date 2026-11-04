@@ -1,0 +1,70 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}{{ theme.label }} · Exercices{% endblock %}
+{% block crumbs %}<a href="{% url 'analyzer:training_home' %}">Exercices</a><span class="sep">/</span><span class="current">{{ theme.label }}</span>{% endblock %}
+{% block content %}
+{% csrf_token %}
+{% if not payload %}
+<div class="card empty">
+  {% icon theme.icon %}
+  <p><b>Aucun exercice disponible pour « {{ theme.label }} ».</b></p>
+  {% if theme.key == "mine" %}<p class="small">Crée d'abord des exercices à partir de tes parties analysées.</p>
+  {% elif theme.key == "review" %}<p class="small">Rien à réviser : tu as réussi tous tes derniers exercices. Bravo !</p>{% endif %}
+  <div class="row" style="justify-content:center"><a class="btn btn-primary" href="{% url 'analyzer:training_home' %}">{% icon "arrow-left" %} Choisir un autre thème</a></div>
+</div>
+{% else %}
+<div class="puzzle-layout">
+  <div class="board-col">
+    <div class="turn-bar" id="turn-bar"></div>
+    <div class="board-frame puzzle-board">
+      <div id="board" role="img" aria-label="Échiquier de l'exercice"></div>
+      <div class="promo" id="promo" hidden></div>
+    </div>
+    <div class="session-strip" id="session" aria-label="Résultats de la séance"></div>
+  </div>
+
+  <div class="card panel puzzle-panel">
+    <div class="pz-head">
+      <span class="theme-icon">{% icon theme.icon %}</span>
+      <div style="min-width:0;flex:1">
+        <div class="kpi-label">{% if theme.category == "mode" %}Mode{% else %}Thème{% endif %}</div>
+        <div class="pz-theme">{{ theme.label }} <span class="faint small">· {{ available }} exercice{{ available|pluralize }}</span></div>
+      </div>
+      <select class="select-inline" id="theme-switch" aria-label="Changer de thème">
+        <option value="mix" {% if theme.key == "mix" %}selected{% endif %}>Exercices variés</option>
+        <option value="review" {% if theme.key == "review" %}selected{% endif %}>Révisions</option>
+        {% for key, label in themes_menu %}<option value="{{ key }}" {% if theme.key == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <div class="pz-rating">
+      <div><div class="kpi-label">Ton classement</div><div class="pz-rating-value"><span id="pz-rating">{{ rating }}</span> <span class="delta" id="pz-delta" hidden></span></div></div>
+      <div title="Exercices réussis d'affilée"><div class="kpi-label">Série</div><span class="streak" id="pz-streak">{% icon "flame" %} <span>{{ streak }}</span></span></div>
+      <div><div class="kpi-label">Chrono</div><span class="tabular" id="pz-timer">0:00</span></div>
+    </div>
+
+    <div class="pz-status" id="pz-status" aria-live="polite"></div>
+
+    <div class="pz-actions">
+      <button type="button" class="btn" id="pz-hint">{% icon "bulb" %} Indice</button>
+      <button type="button" class="btn btn-ghost" id="pz-solution">{% icon "eye" %} Solution</button>
+      <button type="button" class="btn" id="pz-retry" hidden>{% icon "refresh" %} Recommencer</button>
+      <button type="button" class="btn btn-primary" id="pz-next" hidden>Exercice suivant {% icon "arrow-right" %}</button>
+    </div>
+
+    <div class="pz-details" id="pz-details" hidden></div>
+    <p class="kbd-hint" style="text-align:left;margin:0;padding:0 1.15rem 1rem">Clique sur une pièce puis sur sa case d'arrivée, ou fais-la glisser. <kbd>Entrée</kbd> exercice suivant · <kbd>F</kbd> retourner</p>
+  </div>
+</div>
+{{ payload|json_script:"puzzle-data" }}
+{{ pieces|json_script:"pieces-data" }}
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if payload %}<script>
+ChessCoach.initPuzzle({
+  theme: "{{ theme.key|escapejs }}",
+  nextUrl: "{% url 'analyzer:training_next' %}",
+  attemptUrl: "{% url 'analyzer:training_attempt' 0 %}",
+  playUrl: "{% url 'analyzer:training_play' 'THEME' %}",
+});
+</script>{% else %}{% endif %}{% endblock %}

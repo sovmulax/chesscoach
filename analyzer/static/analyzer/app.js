@@ -418,7 +418,7 @@
     const S = 45;
     el.innerHTML = `<svg viewBox="0 0 360 360" xmlns="${NS}">` +
       `<defs><radialGradient id="cc-check"><stop offset="0" stop-color="#ff2d20" stop-opacity=".95"/><stop offset=".5" stop-color="#e0312a" stop-opacity=".5"/><stop offset="1" stop-color="#e0312a" stop-opacity="0"/></radialGradient></defs>` +
-      `<g class="squares"></g><g class="hl"></g><g class="coords"></g><g class="ghosts"></g><g class="pieces"></g><g class="overlay"></g></svg>`;
+      `<g class="squares"></g><g class="hl"></g><g class="coords"></g><g class="ghosts"></g><g class="pieces"></g><g class="hints"></g><g class="marks"></g><g class="overlay"></g></svg>`;
     const svg = el.firstChild;
     const L = name => svg.querySelector("." + name);
     let sq = "";
@@ -468,6 +468,8 @@
 
     function render(fen, o) {
       o = o || {};
+      selected = null; drag = null;
+      L("hints").innerHTML = ""; L("marks").innerHTML = "";
       if (o.orientation && o.orientation !== orientation) { orientation = o.orientation; drawCoords(); }
       else if (!L("coords").firstChild) drawCoords();
       const map = parseFen(fen);
@@ -530,7 +532,117 @@
         }
       }
     }
-    return { render, get orientation() { return orientation; } };
+    // ------------------------------------------------ saisie des coups (clic ou glisser-déposer)
+    let input = null, selected = null, drag = null;
+    const colorOf = ch => (ch === ch.toUpperCase() ? "w" : "b");
+    function sqFromEvent(ev) {
+      const r = svg.getBoundingClientRect();
+      const x = Math.floor((ev.clientX - r.left) / r.width * 8), y = Math.floor((ev.clientY - r.top) / r.height * 8);
+      if (x < 0 || x > 7 || y < 0 || y > 7) return null;
+      const f = orientation === "w" ? x : 7 - x, rank = orientation === "w" ? 8 - y : y + 1;
+      return String.fromCharCode(97 + f) + rank;
+    }
+    function dests(from) { return input ? input.legal.filter(u => u.slice(0, 2) === from).map(u => u.slice(2, 4)) : []; }
+    function showHints(from) {
+      let h = "";
+      if (from) {
+        const [x, yy] = xy(from);
+        h += `<rect x="${x * S}" y="${yy * S}" width="${S}" height="${S}" fill="var(--c-last)"/>`;
+        Array.from(new Set(dests(from))).forEach(to => {
+          const [tx, ty] = xy(to);
+          h += prevMap && prevMap[to]
+            ? `<circle cx="${tx * S + 22.5}" cy="${ty * S + 22.5}" r="20" fill="none" stroke="rgba(20,20,20,.25)" stroke-width="4"/>`
+            : `<circle cx="${tx * S + 22.5}" cy="${ty * S + 22.5}" r="7" fill="rgba(20,20,20,.22)"/>`;
+        });
+      }
+      L("hints").innerHTML = h;
+      el.classList.toggle("has-selection", !!from);
+    }
+    function tryMove(from, to, dragged) {
+      const cands = input.legal.filter(u => u.slice(0, 4) === from + to);
+      selected = null; showHints(null);
+      if (!cands.length) return false;
+      const cb = input.onMove;
+      if (cands.length > 1 && input.choosePromotion) input.choosePromotion(cands, uci => cb(uci, { dragged }));
+      else cb(cands[0], { dragged });
+      return true;
+    }
+    function pointerPos(ev) {
+      const r = svg.getBoundingClientRect();
+      return [(ev.clientX - r.left) / r.width * 360, (ev.clientY - r.top) / r.height * 360];
+    }
+    svg.addEventListener("pointerdown", ev => {
+      if (!input || ev.button > 0) return;
+      const s = sqFromEvent(ev);
+      if (!s) return;
+      if (selected && dests(selected).includes(s)) { tryMove(selected, s, false); ev.preventDefault(); return; }
+      const ch = prevMap && prevMap[s];
+      if (ch && colorOf(ch) === input.color && dests(s).length) {
+        selected = s; showHints(s);
+        const g = L("pieces").querySelector(`[data-sq="${s}"]`);
+        if (g) {
+          const [x0, y0] = pointerPos(ev);
+          drag = { sq: s, g, x0, y0, moved: false, base: g.getAttribute("transform") };
+          try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+        }
+        ev.preventDefault();
+      } else { selected = null; showHints(null); }
+    });
+    svg.addEventListener("pointermove", ev => {
+      if (!drag) return;
+      const [px, py] = pointerPos(ev);
+      if (!drag.moved && Math.hypot(px - drag.x0, py - drag.y0) < 4) return;
+      if (!drag.moved) { drag.moved = true; L("pieces").appendChild(drag.g); el.classList.add("dragging"); }
+      drag.g.setAttribute("transform", `translate(${px - 22.5},${py - 22.5})`);
+    });
+    function endDrag(ev, cancel) {
+      if (!drag) return;
+      const d = drag;
+      drag = null;
+      el.classList.remove("dragging");
+      if (!d.moved) return;
+      const s = cancel ? null : sqFromEvent(ev);
+      if (!s || s === d.sq || !tryMove(d.sq, s, true)) {
+        d.g.setAttribute("transform", d.base);
+        if (s !== d.sq) { selected = null; showHints(null); }
+      }
+    }
+    svg.addEventListener("pointerup", ev => endDrag(ev, false));
+    svg.addEventListener("pointercancel", ev => endDrag(ev, true));
+
+    function enableInput(opts) { input = opts; el.classList.add("interactive"); }
+    function disableInput() { input = null; selected = null; drag = null; showHints(null); el.classList.remove("interactive"); }
+    function annotate(o) {
+      let h = "";
+      (o.rings || []).forEach(s => {
+        const [x, yy] = xy(s);
+        h += `<circle class="pulse-ring" cx="${x * S + 22.5}" cy="${yy * S + 22.5}" r="20" fill="none" stroke="var(--c-arrow-best)" stroke-width="3.5"/>`;
+      });
+      (o.arrows || []).forEach(a => { h += arrow(a.uci, a.color); });
+      L("marks").innerHTML = h;
+    }
+
+    return { render, enableInput, disableInput, annotate, get orientation() { return orientation; } };
+  }
+
+  // Choix de la pièce de promotion (petit menu par-dessus l'échiquier)
+  function promotionPicker(container, pieces, color) {
+    return function (cands, cb) {
+      if (!container) return cb(cands[0]);
+      const order = ["q", "r", "b", "n"].filter(p => cands.some(u => u[4] === p));
+      container.innerHTML = order.map(p => {
+        const key = color === "w" ? p.toUpperCase() : p;
+        const svgPiece = (pieces[key] || "").replace(/\sid="[^"]*"/g, "");
+        return `<button type="button" data-p="${p}" aria-label="Promouvoir"><svg viewBox="0 0 45 45">${svgPiece}</svg></button>`;
+      }).join("");
+      container.hidden = false;
+      container.onclick = ev => {
+        const b = ev.target.closest("[data-p]");
+        if (!b) return;
+        container.hidden = true;
+        cb(cands.find(u => u[4] === b.dataset.p));
+      };
+    };
   }
 
   // Déplacements à animer pour un coup UCI (le roque déplace aussi la tour)
@@ -770,7 +882,434 @@
     go(startPly != null ? startPly : 0, { force: true });
   }
 
+  // ================================================================ outils partagés (exercices, références)
+  // Fait défiler la liste des coups sans faire bouger la page
+  function scrollIntoBox(el) {
+    const box = el.closest(".panel-scroll");
+    if (!box || box.offsetParent === null) return;
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (r.top < b.top + 4) box.scrollTop -= (b.top - r.top) + b.height / 3;
+    else if (r.bottom > b.bottom - 4) box.scrollTop += (r.bottom - b.bottom) + b.height / 3;
+  }
+  function csrf() {
+    const el = $("[name=csrfmiddlewaretoken]");
+    return el ? el.value : "";
+  }
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() }, body: JSON.stringify(body),
+    }).then(r => (r.ok ? r.json() : Promise.reject(r)));
+  }
+  function squaresOf(uci) { return uci ? [uci.slice(0, 2), uci.slice(2, 4)] : []; }
+  function checkSquare(san, fen) { return /[+#]$/.test(san || "") ? kingSquare(fen, fen.split(" ")[1]) : null; }
+  function simpleBar(el, color, name, fen, opts) {
+    if (!el) return;
+    opts = opts || {};
+    const mat = material(fen), diff = mat[color] - mat[color === "w" ? "b" : "w"];
+    const toMove = !opts.over && fen.split(" ")[1] === color;
+    el.classList.toggle("to-move", toMove);
+    el.innerHTML = `<span class="side side-${color}"></span><span class="name">${esc(name)}</span>` +
+      `${opts.you ? '<span class="you">toi</span>' : ""}${diff > 0 ? `<span class="faint small tabular">+${diff}</span>` : ""}` +
+      `<span class="spacer"></span>${toMove ? '<span class="badge badge-accent">au trait</span>' : ""}`;
+  }
+
+  function initRatingChart() {
+    const el = $("#rating-chart"), dataEl = $("#rating-data");
+    if (!el || !dataEl) return;
+    const vals = JSON.parse(dataEl.textContent);
+    if (vals.length < 2) return;
+    const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), pad = Math.max(15, Math.round((hi - lo) * .15));
+    lineChart(el, vals, {
+      height: 150, min: lo - pad, max: hi + pad, gridValues: [lo, hi], label: "Évolution du classement",
+      tooltip: i => (i === 0 ? "Départ" : `Essai ${i}`) + ` · <b>${vals[i]}</b>`,
+    });
+  }
+
+  function initTrainingHome() {
+    initRatingChart();
+    $all("[data-gen-status][data-running]").forEach(card => {
+      if (!card.dataset.running) return;
+      poll(card.dataset.genStatus, d => {
+        const msg = $("[data-gen-message]", card), cnt = $("[data-gen-count]", card);
+        if (msg && d.message) { msg.textContent = d.message; msg.hidden = false; }
+        if (cnt) cnt.textContent = d.n_puzzles;
+        if (!d.running) { setTimeout(() => location.reload(), 800); return false; }
+      }, 2500);
+    });
+  }
+
+  // ================================================================ exercices
+  function initPuzzle(cfg) {
+    const pieces = JSON.parse($("#pieces-data").textContent);
+    let data = JSON.parse($("#puzzle-data").textContent);
+    const boardEl = $("#board"), board = createBoard(boardEl, pieces);
+    const statusEl = $("#pz-status"), detailsEl = $("#pz-details"), sessionEl = $("#session");
+    const btn = { hint: $("#pz-hint"), sol: $("#pz-solution"), retry: $("#pz-retry"), next: $("#pz-next") };
+    const seen = [data.id], session = [];
+    let st = null, orientation = data.color, last = null, timer = null;
+
+    const STATUS_ICON = { play: "target", good: "check", bad: "x", win: "trophy", done: "eye", hint: "bulb", wait: "clock", info: "bulb" };
+    function status(kind, text) {
+      statusEl.className = "pz-status is-" + kind;
+      statusEl.innerHTML = `<span class="pz-status-icon">${icon(STATUS_ICON[kind] || "bulb")}</span><span>${text}</span>`;
+    }
+    function show(fen, opts) {
+      last = { fen, opts: Object.assign({}, opts, { movers: null }) };
+      board.render(fen, Object.assign({ orientation }, opts));
+    }
+    function turnBar() {
+      const c = data.color;
+      $("#turn-bar").innerHTML = `<span class="side side-${c}"></span><b>${c === "w" ? "Les Blancs" : "Les Noirs"} jouent</b><span class="spacer"></span>` +
+        `<span class="faint small">${data.steps.length > 1 ? data.steps.length + " coups à trouver" : "1 coup à trouver"}</span>`;
+    }
+    function startTimer() {
+      stopTimer();
+      const t = $("#pz-timer");
+      timer = setInterval(() => {
+        const sec = Math.floor((Date.now() - st.t0) / 1000);
+        t.textContent = Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
+      }, 1000);
+    }
+    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+    function enable() {
+      const step = data.steps[st.step];
+      board.enableInput({ color: data.color, legal: Object.keys(step.legal), onMove, choosePromotion: promotionPicker($("#promo"), pieces, data.color) });
+    }
+    function reset(p, practice) {
+      data = p;
+      orientation = p.color;
+      st = { step: 0, failed: false, hint: 0, reported: !!practice, practice: !!practice, done: false, mistakes: 0, t0: Date.now(), busy: true };
+      detailsEl.hidden = true;
+      btn.retry.hidden = btn.next.hidden = true;
+      btn.hint.hidden = btn.sol.hidden = false;
+      $("#pz-timer").textContent = "0:00";
+      turnBar();
+      show(p.start_fen, {});
+      status("wait", "L'adversaire joue…");
+      setTimeout(() => {
+        show(p.setup.fen, { lastMove: squaresOf(p.setup.uci), check: checkSquare(p.setup.san, p.setup.fen), movers: moversFor(p.setup.uci, p.start_fen) });
+        st.busy = false;
+        st.t0 = Date.now();
+        status("play", `${practice ? "Nouvel essai (non compté) — " : ""}Ton tour : trouve le meilleur coup pour les <b>${p.color === "w" ? "Blancs" : "Noirs"}</b>.`);
+        enable();
+        startTimer();
+      }, 650);
+    }
+    function onMove(uci, info) {
+      if (st.busy || st.done) return;
+      const step = data.steps[st.step], mv = step.legal[uci];
+      if (!mv) return;
+      const ok = step.accept.includes(uci) || mv.mate;
+      const isLast = st.step === data.steps.length - 1;
+      board.disableInput();
+      const movers = info && info.dragged ? null : moversFor(uci, step.fen);
+      show(mv.fen, { movers, lastMove: squaresOf(uci), check: checkSquare(mv.san, mv.fen), badge: { sq: uci.slice(2, 4), cls: ok ? "best" : "blunder" } });
+      if (ok) {
+        if (mv.mate || isLast) return finish(true);
+        status("good", `<b>${esc(mv.san)}</b> : bien joué ! Continue…`);
+        st.busy = true;
+        setTimeout(() => {
+          const r = step.reply;
+          show(r.fen, { movers: moversFor(r.uci, mv.fen), lastMove: squaresOf(r.uci), check: checkSquare(r.san, r.fen) });
+          st.step++;
+          st.busy = false;
+          status("play", `L'adversaire a répondu <b>${esc(r.san)}</b>. À toi de trouver la suite.`);
+          enable();
+        }, 500);
+      } else {
+        st.mistakes++;
+        if (!st.failed) { st.failed = true; report(false); }
+        status("bad", `<b>${esc(mv.san)}</b> n'est pas le bon coup. Réessaie, ou regarde la solution.`);
+        st.busy = true;
+        setTimeout(() => {
+          const back = moversFor(uci, step.fen).map(m => ({ from: m.to, to: m.from }));
+          const prev = st.step === 0 ? data.setup : data.steps[st.step - 1].reply;
+          show(step.fen, { movers: back, lastMove: squaresOf(prev.uci), check: checkSquare(prev.san, step.fen) });
+          st.busy = false;
+          enable();
+        }, 900);
+      }
+    }
+    function report(solved) {
+      if (st.reported) return;
+      st.reported = true;
+      postJSON(cfg.attemptUrl.replace(/\/0\/tentative\/$/, `/${data.id}/tentative/`), {
+        solved, mistakes: st.mistakes, used_hint: st.hint > 0, seconds: (Date.now() - st.t0) / 1000, theme: cfg.theme,
+      }).then(d => {
+        $("#pz-rating").textContent = d.rating_after;
+        const delta = $("#pz-delta");
+        delta.hidden = false;
+        delta.className = "delta " + (d.delta >= 0 ? "up" : "down");
+        delta.textContent = (d.delta > 0 ? "+" : d.delta < 0 ? "−" : "±") + Math.abs(d.delta);
+        $("#pz-streak span").textContent = d.streak;
+        if (motionOK() && delta.animate) delta.animate([{ transform: "scale(.6)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], { duration: 350, easing: "cubic-bezier(.3,1.6,.5,1)" });
+      }).catch(() => status("info", "Résultat non enregistré (serveur injoignable)."));
+    }
+    function finish(success) {
+      st.done = true;
+      stopTimer();
+      board.disableInput();
+      const solved = success && !st.failed && !st.hint;
+      if (!st.practice) {
+        report(solved);
+        session.push({ ok: solved });
+        sessionEl.innerHTML = session.map((r, i) => `<span class="sess ${r.ok ? "ok" : "ko"}" title="Exercice ${i + 1} : ${r.ok ? "réussi" : "raté"}">${r.ok ? "✓" : "✗"}</span>`).join("");
+      }
+      if (solved) status("win", "Exercice réussi du premier coup !");
+      else if (success) status("done", "Résolu… avec un peu d'aide. Il reviendra dans tes révisions.");
+      else status("done", "Voici la solution. Cet exercice reviendra dans tes révisions.");
+      if (solved && motionOK() && boardEl.animate) boardEl.animate([{ boxShadow: "0 0 0 0 transparent" }, { boxShadow: "0 0 0 6px var(--c-best)" }, { boxShadow: "0 0 0 0 transparent" }], { duration: 900 });
+      btn.hint.hidden = btn.sol.hidden = true;
+      btn.retry.hidden = btn.next.hidden = false;
+      btn.next.focus({ preventScroll: true });
+      details();
+    }
+    function details() {
+      const line = [];
+      data.steps.forEach((s, i) => {
+        line.push(`<b>${esc(s.solution_san)}</b>`);
+        if (s.reply && i < data.steps.length - 1) line.push(esc(s.reply.san));
+      });
+      let h = `<div class="pz-line"><span class="kpi-label">Solution</span><div class="mono">${line.join(" · ")}</div></div>`;
+      if (data.steps[0].accept.length > 1) h += `<p class="small muted" style="margin:.4rem 0 0">Autres coups acceptés : ${data.steps[0].accept.slice(1).map(u => esc(data.steps[0].legal[u] ? data.steps[0].legal[u].san : u)).join(", ")}.</p>`;
+      h += `<div class="row row-tight" style="margin-top:.8rem"><span class="badge">Difficulté ${data.rating}</span>` +
+        data.themes.filter(t => !["longueur"].includes(t.category)).map(t => `<a class="chip" href="${cfg.playUrl.replace("THEME", t.key)}">${icon(t.icon)} ${esc(t.label)}</a>`).join("") + "</div>";
+      if (data.note) h += `<p class="small" style="margin:.8rem 0 0">${icon("king")} ${esc(data.note)}${data.game_url ? ` <a href="${data.game_url}">Voir dans ta partie ${icon("arrow-right")}</a>` : ""}</p>`;
+      detailsEl.innerHTML = h;
+      detailsEl.hidden = false;
+    }
+    function hint() {
+      if (!st || st.done || st.busy) return;
+      st.hint++;
+      const step = data.steps[st.step];
+      if (st.hint === 1) {
+        board.annotate({ rings: [step.solution.slice(0, 2)] });
+        status("hint", "Indice : c'est cette pièce qu'il faut jouer.");
+      } else {
+        board.annotate({ arrows: [{ uci: step.solution, color: "var(--c-arrow-best)" }] });
+        status("hint", "Indice : joue ce coup.");
+      }
+    }
+    function solution() {
+      if (!st || st.done || st.busy) return;
+      st.hint = Math.max(st.hint, 1);
+      if (!st.failed) { st.failed = true; report(false); }
+      board.disableInput();
+      st.busy = true;
+      (function playStep() {
+        const step = data.steps[st.step], mv = step.legal[step.solution];
+        show(mv.fen, { movers: moversFor(step.solution, step.fen), lastMove: squaresOf(step.solution), check: checkSquare(mv.san, mv.fen), badge: { sq: step.solution.slice(2, 4), cls: "best" } });
+        if (st.step === data.steps.length - 1 || mv.mate) { st.busy = false; return finish(false); }
+        setTimeout(() => {
+          const r = step.reply;
+          show(r.fen, { movers: moversFor(r.uci, mv.fen), lastMove: squaresOf(r.uci), check: checkSquare(r.san, r.fen) });
+          st.step++;
+          setTimeout(playStep, 650);
+        }, 650);
+      })();
+    }
+    function next() {
+      btn.next.disabled = true;
+      fetch(`${cfg.nextUrl}?theme=${encodeURIComponent(cfg.theme)}&exclude=${seen.join(",")}`)
+        .then(r => r.json())
+        .then(d => {
+          btn.next.disabled = false;
+          if (d.empty || !d.puzzle) { status("info", "Tu as fait le tour de ce thème ! Choisis-en un autre ou passe aux révisions."); return; }
+          seen.push(d.puzzle.id);
+          const url = new URL(location.href); url.searchParams.set("id", d.puzzle.id); history.replaceState(null, "", url);
+          reset(d.puzzle, false);
+        })
+        .catch(() => { btn.next.disabled = false; status("info", "Impossible de charger l'exercice suivant."); });
+    }
+    btn.hint.addEventListener("click", hint);
+    btn.sol.addEventListener("click", solution);
+    btn.next.addEventListener("click", next);
+    btn.retry.addEventListener("click", () => reset(data, true));
+    const sw = $("#theme-switch");
+    if (sw) sw.addEventListener("change", () => { location.href = cfg.playUrl.replace("THEME", sw.value); });
+    document.addEventListener("keydown", ev => {
+      if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName) || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (ev.key === "Enter" && st && st.done) { next(); ev.preventDefault(); }
+      else if ((ev.key === "f" || ev.key === "F") && last) {
+        orientation = orientation === "w" ? "b" : "w";
+        board.render(last.fen, Object.assign({}, last.opts, { orientation }));
+        if (st && !st.done && !st.busy) enable();
+      }
+    });
+    reset(data, false);
+  }
+
+  // ================================================================ parties de référence
+  function initReference() {
+    const data = JSON.parse($("#ref-data").textContent);
+    const pieces = JSON.parse($("#pieces-data").textContent);
+    const boardEl = $("#board"), board = createBoard(boardEl, pieces);
+    const info = $("#move-info"), list = $("#movelist");
+    const N = data.fens.length - 1;
+    let orientation = data.orientation, k = -1, timer = null, guess = null;
+    const panelTabs = tabs("ref", { scope: $(".panel") });
+
+    let html = "";
+    data.moves.forEach((m, idx) => {
+      const n = m.label.match(/^\d+/)[0];
+      if (idx === 0 && m.color === "b") html += `<span class="no">${n}.</span><span></span>`;
+      if (m.color === "w") html += `<span class="no">${n}.</span>`;
+      html += `<span class="mv ${m.note ? "has-note" : ""}" data-k="${m.i + 1}" role="button" tabindex="-1">${m.note ? '<span class="dot" style="--cls-c:var(--accent)"></span>' : ""}<span>${esc(m.san)}</span></span>`;
+    });
+    list.innerHTML = html;
+    list.addEventListener("click", ev => { const t = ev.target.closest(".mv"); if (t && !guess) { stop(); go(parseInt(t.dataset.k, 10)); } });
+
+    function bubble(msg) {
+      const m = k > 0 ? data.moves[k - 1] : null;
+      let h = "";
+      if (msg) h += `<div class="cb-head"><span class="cls-icon" style="--cls-c:${msg.color || "var(--accent)"}">${icon(msg.icon || "target")}</span><div><div class="cb-title">${msg.title}</div>${msg.sub ? `<div class="cb-sub">${msg.sub}</div>` : ""}</div></div>`;
+      if (!m && !msg) {
+        h = `<div class="cb-head"><span class="cls-icon" style="--cls-c:var(--accent)">${icon("book")}</span><div><div class="cb-title">Position de départ</div><div class="cb-sub">${esc(data.players.w.name)} – ${esc(data.players.b.name)}</div></div></div>` +
+          `<p class="cb-empty" style="margin:.7rem 0 0">Avance coup par coup : les moments clés sont commentés. Ou essaie le mode « devine le coup ».</p>`;
+      } else if (m) {
+        if (!msg) h += `<div class="cb-head"><span class="cls-icon" style="--cls-c:${m.note ? "var(--accent)" : "var(--border-strong)"}">${icon(m.note ? "bulb" : "next")}</span><div><div class="cb-title"><span class="mono">${esc(m.label)}</span></div><div class="cb-sub">${m.color === "w" ? esc(data.players.w.name) : esc(data.players.b.name)}</div></div></div>`;
+        if (m.note) h += `<p style="margin:.7rem 0 0">${esc(m.note)}</p>`;
+        if (k === N) h += `<p class="cb-empty" style="margin:.6rem 0 0">Fin de la partie : ${esc(data.result)}.</p>`;
+      }
+      info.innerHTML = h;
+    }
+    function go(newK, opts) {
+      opts = opts || {};
+      newK = Math.max(0, Math.min(N, newK));
+      if (newK === k && !opts.force) return;
+      let movers = null;
+      if (!opts.force && k >= 0 && Math.abs(newK - k) === 1) {
+        if (newK > k) movers = moversFor(data.moves[newK - 1].uci, data.fens[k]);
+        else movers = moversFor(data.moves[k - 1].uci, data.fens[newK]).map(mv => ({ from: mv.to, to: mv.from }));
+      }
+      k = newK;
+      const m = k > 0 ? data.moves[k - 1] : null;
+      board.render(data.fens[k], {
+        orientation, movers, lastMove: m ? squaresOf(m.uci) : [], check: m ? checkSquare(m.san, data.fens[k]) : null,
+        badge: opts.badge ? { sq: m.uci.slice(2, 4), cls: opts.badge } : null,
+      });
+      $all(".mv", list).forEach(e => {
+        const kk = parseInt(e.dataset.k, 10);
+        e.classList.toggle("current", kk === k);
+        e.classList.toggle("future", !!guess && kk > k);
+      });
+      const cur = list.querySelector(".mv.current");
+      if (cur) scrollIntoBox(cur);
+      $all(".moment").forEach(el => el.classList.toggle("current", parseInt(el.dataset.goto, 10) === k));
+      const top = orientation === "w" ? "b" : "w";
+      simpleBar($("#bar-top"), top, data.players[top].name, data.fens[k], { you: guess && top === data.hero, over: k === N });
+      simpleBar($("#bar-bottom"), orientation, data.players[orientation].name, data.fens[k], { you: guess && orientation === data.hero, over: k === N });
+      bubble(opts.msg);
+      updatePlay();
+      if (guess) guessTurn();
+    }
+
+    // Lecture automatique
+    const playBtn = $('[data-nav="play"]');
+    function updatePlay() { if (playBtn) $("use", playBtn).setAttribute("href", timer ? "#i-pause" : "#i-play"); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; updatePlay(); } }
+    function play() {
+      if (guess) return;
+      if (timer) return stop();
+      if (k >= N) go(0);
+      timer = setInterval(() => { if (k >= N) stop(); else go(k + 1); }, 1100);
+      updatePlay();
+    }
+
+    // Mode « devine le coup »
+    const toggle = $("#guess-toggle"), guessBar = $("#guess-bar");
+    function guessScore() { $("#guess-score").textContent = `${guess.correct} / ${guess.total}`; }
+    function guessTurn() {
+      board.disableInput();
+      if (k >= N) {
+        const pct = guess.total ? Math.round(100 * guess.correct / guess.total) : 0;
+        bubble({ title: `Score : ${guess.correct} / ${guess.total} (${pct} %)`, sub: "Bravo d'être allé jusqu'au bout ! Rejoue la partie pour améliorer ton score.", icon: "trophy", color: "var(--c-best)" });
+        const url = $("#study-done") && $("#study-done").dataset.url;
+        if (url && guess.total) postJSON(url, { guess_total: guess.total, guess_correct: guess.correct }).catch(() => {});
+        return;
+      }
+      const m = data.moves[k];
+      if (m.color !== data.hero || !m.legal) {
+        guess.timer = setTimeout(() => go(k + 1), 900);
+        return;
+      }
+      const who = data.players[data.hero].name;
+      if (!info.querySelector(".guess-feedback")) {
+        const p = document.createElement("p");
+        p.className = "cb-empty guess-feedback";
+        p.style.margin = ".7rem 0 0";
+        p.innerHTML = `${icon("target")} À toi : quel coup a joué <b>${esc(who)}</b> ?`;
+        info.appendChild(p);
+      }
+      board.enableInput({
+        color: data.hero, legal: m.legal, choosePromotion: promotionPicker($("#promo"), pieces, data.hero),
+        onMove(uci) {
+          guess.total++;
+          const ok = uci === m.uci;
+          if (ok) guess.correct++;
+          guessScore();
+          const msg = ok
+            ? { title: `Bien vu : ${esc(m.label)}`, icon: "check", color: "var(--c-best)" }
+            : { title: `${esc(who)} a joué ${esc(m.label)}`, sub: "Pas tout à fait : compare avec ton idée.", icon: "x", color: "var(--c-mistake)" };
+          go(k + 1, { msg, badge: ok ? "best" : null });
+        },
+      });
+    }
+    function setGuess(on) {
+      stop();
+      if (guess && guess.timer) clearTimeout(guess.timer);
+      guess = on ? { correct: 0, total: 0 } : null;
+      toggle.classList.toggle("active", on);
+      toggle.setAttribute("aria-pressed", String(on));
+      guessBar.hidden = !on;
+      if (on) {
+        orientation = data.hero;
+        guessScore();
+        if (panelTabs) panelTabs.activate("moves");
+        go(0, { force: true });
+      } else {
+        board.disableInput();
+        go(k, { force: true });
+      }
+    }
+    if (toggle) toggle.addEventListener("click", () => setGuess(!guess));
+
+    $all("[data-nav]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.nav;
+      if (a === "play") return play();
+      if (a === "flip") { orientation = orientation === "w" ? "b" : "w"; return go(k, { force: true }); }
+      if (guess) return;
+      stop();
+      if (a === "first") go(0); else if (a === "prev") go(k - 1); else if (a === "next") go(k + 1); else if (a === "last") go(N);
+    }));
+    document.addEventListener("keydown", ev => {
+      if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName) || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (ev.key === "f" || ev.key === "F") { orientation = orientation === "w" ? "b" : "w"; go(k, { force: true }); return; }
+      if (guess) return;
+      const map = { ArrowLeft: () => go(k - 1), ArrowRight: () => go(k + 1), Home: () => go(0), End: () => go(N) };
+      if (ev.key === " " && document.activeElement.tagName !== "BUTTON") { play(); ev.preventDefault(); }
+      else if (map[ev.key]) { stop(); map[ev.key](); ev.preventDefault(); }
+    });
+    $all("[data-goto]").forEach(el => el.addEventListener("click", () => {
+      if (guess) setGuess(false);
+      stop(); go(parseInt(el.dataset.goto, 10));
+      if (window.innerWidth <= 980) boardEl.scrollIntoView({ behavior: motionOK() ? "smooth" : "auto", block: "center" });
+    }));
+    const done = $("#study-done");
+    if (done) done.addEventListener("click", () => {
+      postJSON(done.dataset.url, { completed: true }).then(() => {
+        done.disabled = true; done.classList.remove("btn-primary");
+        done.innerHTML = `${icon("check")} Partie étudiée`;
+      }).catch(() => {});
+    });
+    if (panelTabs) panelTabs.activate("lessons");
+    go(0, { force: true });
+  }
+
   initCommon();
   initAppearance();
-  window.ChessCoach = { initJobPanel, initGameJob, initGameFilters, initEloChart, initGame, initHome, initDashboard };
+  window.ChessCoach = {
+    initJobPanel, initGameJob, initGameFilters, initEloChart, initGame, initHome, initDashboard,
+    initPuzzle, initReference, initTrainingHome, initRatingChart,
+  };
 })();

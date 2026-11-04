@@ -1,0 +1,100 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}{{ ref.title }} · Parties de référence{% endblock %}
+{% block crumbs %}<a href="{% url 'analyzer:reference_list' %}">Parties de référence</a><span class="sep">/</span><span class="current">{{ ref.title }}</span>{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="game-head">
+  <div style="min-width:0">
+    <div class="game-title">
+      <h1>{{ ref.title }}</h1>
+      <span class="badge badge-level-{{ ref.level }}">{{ ref.level_label }}</span>
+      {% if study.completed_at %}<span class="badge badge-done">{% icon "check" %} étudiée</span>{% endif %}
+    </div>
+    <p class="muted" style="margin:.3rem 0 0">{{ ref.subtitle }}</p>
+    <div class="game-meta">
+      <span class="chip"><span class="side side-w" style="margin:0"></span> {{ ref.white }}</span>
+      <span class="chip"><span class="side side-b" style="margin:0"></span> {{ ref.black }}</span>
+      {% if ref.year %}<span class="chip">{% icon "calendar" %} {{ ref.event }}, {{ ref.year }}</span>{% endif %}
+      <span class="chip">{% icon "swords" %} {{ ref.result }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="game-layout">
+  <div class="board-col">
+    <div class="player-bar" id="bar-top"></div>
+    <div class="board-box">
+      <div class="board-frame puzzle-board"><div id="board" role="img" aria-label="Échiquier"></div><div class="promo" id="promo" hidden></div></div>
+    </div>
+    <div class="player-bar" id="bar-bottom"></div>
+    <div class="controls" role="toolbar" aria-label="Navigation dans la partie">
+      <button type="button" class="ctrl" data-nav="first" title="Début" aria-label="Début">{% icon "first" %}</button>
+      <button type="button" class="ctrl" data-nav="prev" title="Coup précédent (←)" aria-label="Coup précédent">{% icon "prev" %}</button>
+      <button type="button" class="ctrl primary" data-nav="play" title="Lecture automatique (Espace)" aria-label="Lecture automatique"><svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg></button>
+      <button type="button" class="ctrl" data-nav="next" title="Coup suivant (→)" aria-label="Coup suivant">{% icon "next" %}</button>
+      <button type="button" class="ctrl" data-nav="last" title="Fin" aria-label="Fin">{% icon "last" %}</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" class="ctrl" data-nav="flip" title="Retourner l'échiquier (F)" aria-label="Retourner l'échiquier">{% icon "flip" %}</button>
+    </div>
+    {% if payload.guess %}
+    <div class="controls" style="margin-top:.5rem">
+      <button type="button" class="ctrl ctrl-text" id="guess-toggle" aria-pressed="false">{% icon "target" %} Mode « devine le coup »</button>
+    </div>
+    {% endif %}
+    <div class="kbd-hint"><kbd>←</kbd> <kbd>→</kbd> coups · <kbd>Espace</kbd> lecture · <kbd>F</kbd> retourner</div>
+  </div>
+
+  <div class="card panel">
+    <div class="coach-bubble" id="move-info" aria-live="polite"></div>
+    <div class="guess-bar" id="guess-bar" hidden>
+      <span>{% icon "target" %} Joue le coup des {% if ref.hero == "w" %}Blancs{% else %}Noirs{% endif %}</span>
+      <span class="spacer"></span><span class="badge badge-accent" id="guess-score">0 / 0</span>
+    </div>
+    <div class="panel-tabs" role="tablist" data-tabs="ref">
+      <button type="button" role="tab" data-tab="lessons" aria-selected="true">{% icon "bulb" %} Leçons</button>
+      <button type="button" role="tab" data-tab="moves" aria-selected="false">{% icon "list" %} Coups</button>
+      <button type="button" role="tab" data-tab="moments" aria-selected="false">{% icon "target" %} Moments clés</button>
+    </div>
+    <div class="panel-body panel-scroll">
+      <div data-panel="lessons" role="tabpanel">
+        <p>{{ ref.summary }}</p>
+        <h3 style="margin:1rem 0 .6rem">À retenir</h3>
+        <ul class="takeaways">{% for l in ref.lessons %}<li class="good">{% icon "check-circle" %}<span>{{ l }}</span></li>{% endfor %}</ul>
+        <div class="chips" style="margin-top:1rem">{% for t in ref.theme_labels %}<span class="chip">{{ t }}</span>{% endfor %}</div>
+        {% if related_themes %}
+        <h3 style="margin:1.2rem 0 .6rem">S'entraîner sur ces thèmes</h3>
+        <div class="chips">{% for t in related_themes %}<a class="chip" href="{% url 'analyzer:training_play' t.key %}">{% icon t.icon %} {{ t.label }}</a>{% endfor %}</div>
+        {% endif %}
+        <div class="row" style="margin-top:1.2rem">
+          <button type="button" class="btn {% if not study.completed_at %}btn-primary{% endif %}" id="study-done" data-url="{% url 'analyzer:reference_progress' ref.slug %}" {% if study.completed_at %}disabled{% endif %}>
+            {% icon "check" %} {% if study.completed_at %}Partie étudiée{% else %}J'ai étudié cette partie{% endif %}</button>
+          {% if study.guess_total %}<span class="muted small">Meilleur score « devine le coup » : {{ study.guess_correct }} / {{ study.guess_total }}</span>{% endif %}
+        </div>
+      </div>
+      <div data-panel="moves" role="tabpanel" hidden><div class="movelist" id="movelist"></div></div>
+      <div data-panel="moments" role="tabpanel" hidden>
+        <div class="moments">
+          {% for m in payload.moves %}{% if m.note %}
+          <button type="button" class="moment" data-goto="{{ m.i|add:1 }}" style="--cls-c: var(--accent)">
+            <span class="cls-icon" style="--cls-c: var(--accent)">{% icon "bulb" %}</span>
+            <span><span class="moment-title"><span class="mono">{{ m.label }}</span></span><span class="muted small" style="display:block;margin-top:.2rem">{{ m.note }}</span></span>
+          </button>
+          {% endif %}{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if others %}
+<section class="section">
+  <div class="section-head"><h2>{% icon "book" %} Dans le même esprit</h2></div>
+  <div class="grid grid-3">{% for r in others %}{% include "analyzer/_reference_card.html" %}{% endfor %}</div>
+</section>
+{% endif %}
+
+{{ payload|json_script:"ref-data" }}
+{{ pieces|json_script:"pieces-data" }}
+{% endblock %}
+{% block scripts %}<script>ChessCoach.initReference();</script>{% endblock %}

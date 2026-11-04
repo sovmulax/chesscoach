@@ -1,0 +1,286 @@
+{
+  "version": 1,
+  "note": "Catalogue des parties de référence. Les coups sont du domaine public ; textes et commentaires écrits pour Chess Coach. Les notes sont repérées par numéro de coup + couleur (ex. « 10w », « 17b »).",
+  "games": [
+    {
+      "slug": "mat-du-berger",
+      "title": "Le mat du berger",
+      "subtitle": "Le piège que tout débutant doit savoir parer",
+      "white": "Exemple", "black": "Exemple", "year": null, "event": "Piège d'ouverture",
+      "result": "1-0", "level": "debutant", "hero": "b", "guess": false, "expect_mate": true,
+      "themes": ["vigilance", "opening_traps", "king_safety"],
+      "summary": "Quatre coups suffisent si l'on oublie de regarder les menaces adverses. À rejouer du côté des Noirs : à chaque coup blanc, demande-toi ce qu'il menace.",
+      "lessons": [
+        "Après chaque coup adverse, pose-toi la question : « Qu'est-ce qu'il menace ? »",
+        "Le point f7 (f2 pour les Blancs) n'est défendu que par le roi en début de partie.",
+        "Une sortie précoce de la dame se pare simplement en développant avec gain de temps."
+      ],
+      "pgn": "1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6 4.Qxf7#",
+      "notes": {
+        "2w": "Le fou vise f7, le point le plus faible du camp noir.",
+        "3w": "La dame rejoint le fou : double attaque sur f7, avec menace de mat immédiat.",
+        "3b": "Erreur décisive : le cavalier attaque la dame mais ne défend pas f7. Il fallait 3...g6 (ou 3...De7), qui pare la menace.",
+        "4w": "Mat : le roi noir est bloqué par ses propres pièces et f7 n'était défendu par personne d'autre."
+      }
+    },
+    {
+      "slug": "legal-1750",
+      "title": "Le mat de Légal",
+      "subtitle": "La gourmandise punie par un faux clouage",
+      "white": "Kermur de Légal", "black": "Saint-Brie", "year": 1750, "event": "Paris, café de la Régence",
+      "result": "1-0", "level": "debutant", "hero": "w", "guess": true, "expect_mate": true,
+      "themes": ["opening_traps", "pin", "greed", "development", "vigilance"],
+      "summary": "Les Noirs pensent que le cavalier blanc est cloué et prennent la dame offerte… qui n'était qu'un appât. Une leçon sur les clouages relatifs et le prix de la gourmandise.",
+      "lessons": [
+        "Un clouage sur la dame n'est pas absolu : la pièce clouée peut bouger si cela rapporte plus.",
+        "Avant de prendre une pièce offerte, cherche ce que l'adversaire obtient en échange.",
+        "Développe tes pièces au lieu de jouer des coups de pions lents en début de partie."
+      ],
+      "pgn": "1.e4 e5 2.Nf3 d6 3.Bc4 Bg4 4.Nc3 g6 5.Nxe5 Bxd1 6.Bxf7+ Ke7 7.Nd5#",
+      "notes": {
+        "3b": "Le fou noir semble clouer le cavalier f3 sur la dame.",
+        "4b": "Coup lent : les Noirs ne développent aucune pièce et n'aident pas leur roi.",
+        "5w": "Le cavalier « cloué » bouge quand même et prend le pion e5 : la dame blanche est offerte.",
+        "5b": "La gourmandise : prendre la dame perd la partie. Il fallait se contenter de perdre un pion.",
+        "6w": "Échec sur f7, le point faible : le roi noir doit avancer.",
+        "7w": "Mat avec trois pièces mineures : le roi n'a plus aucune case de fuite."
+      }
+    },
+    {
+      "slug": "opera-1858",
+      "title": "La partie de l'Opéra",
+      "subtitle": "Le développement rapide contre le roi resté au centre",
+      "white": "Paul Morphy", "black": "Duc de Brunswick et comte Isouard", "year": 1858, "event": "Paris, à l'Opéra",
+      "result": "1-0", "level": "debutant", "hero": "w", "guess": true, "expect_mate": true,
+      "themes": ["development", "open_lines", "pin", "sacrifice", "mating_attack", "king_safety"],
+      "summary": "La partie modèle pour comprendre le développement : Morphy sort toutes ses pièces, roque, ouvre les lignes vers le roi adverse resté au centre et mate avec seulement deux pièces.",
+      "lessons": [
+        "Développe vite tes pièces et roque avant de lancer une attaque.",
+        "Un roi resté au centre est une cible : ouvre les lignes, quitte à sacrifier du matériel.",
+        "Les clouages immobilisent les défenseurs : profites-en pour amener de nouvelles pièces."
+      ],
+      "pgn": "1.e4 e5 2.Nf3 d6 3.d4 Bg4 4.dxe5 Bxf3 5.Qxf3 dxe5 6.Bc4 Nf6 7.Qb3 Qe7 8.Nc3 c6 9.Bg5 b5 10.Nxb5 cxb5 11.Bxb5+ Nbd7 12.O-O-O Rd8 13.Rxd7 Rxd7 14.Rd1 Qe6 15.Bxd7+ Nxd7 16.Qb8+ Nxb8 17.Rd8#",
+      "notes": {
+        "3b": "Les Noirs clouent le cavalier, mais devront échanger ce fou : les Blancs gagnent du temps de développement.",
+        "5w": "La dame reprend en se développant : les Blancs ont déjà une avance nette.",
+        "7w": "Double attaque sur f7 et b7 : toujours regarder les pions non défendus près du roi adverse.",
+        "9w": "Le fou cloue le cavalier f6 sur la dame. Toutes les pièces blanches sont actives, les Noirs ne peuvent toujours pas roquer.",
+        "10w": "Sacrifice : ouvrir des lignes vers un roi resté au centre vaut plus qu'un cavalier.",
+        "12w": "Roque : le roi est à l'abri et la tour arrive aussitôt sur la colonne d ouverte.",
+        "13w": "Le cavalier d7 est cloué : cette prise gagne du matériel et maintient la pression.",
+        "16w": "Sacrifice de dame : il dévie le cavalier qui gardait la case d8.",
+        "17w": "Mat avec deux pièces seulement : le fou cloue, la tour mate. Développement + lignes ouvertes."
+      }
+    },
+    {
+      "slug": "reti-tartakower-1910",
+      "title": "Réti – Tartakower",
+      "subtitle": "La dame chasseuse de pions et le roi au centre",
+      "white": "Richard Réti", "black": "Savielly Tartakower", "year": 1910, "event": "Vienne",
+      "result": "1-0", "level": "debutant", "hero": "w", "guess": true, "expect_mate": true,
+      "themes": ["king_safety", "development", "sacrifice", "double_check", "mating_attack", "greed"],
+      "summary": "Les Noirs gagnent un pion avec leur dame au lieu de développer et de roquer. Réti offre sa dame pour attirer le roi sur la colonne ouverte et mate par échec double.",
+      "lessons": [
+        "Ne pars pas à la chasse aux pions avec ta dame avant d'avoir développé tes pièces.",
+        "Roque tôt : un roi au centre face à une colonne ouverte est en grand danger.",
+        "L'échec double ne se pare qu'en bougeant le roi : c'est souvent décisif."
+      ],
+      "pgn": "1.e4 c6 2.d4 d5 3.Nc3 dxe4 4.Nxe4 Nf6 5.Qd3 e5 6.dxe5 Qa5+ 7.Bd2 Qxe5 8.O-O-O Nxe4 9.Qd8+ Kxd8 10.Bg5+ Kc7 11.Bd8#",
+      "notes": {
+        "6b": "La dame noire part à la chasse au pion e5 au lieu de laisser les pièces mineures se développer.",
+        "8w": "Le roque offre le cavalier e4, mais la tour arrive sur la colonne d, face au roi noir.",
+        "8b": "Encore du matériel, et toujours pas de roque : le roi noir reste au centre.",
+        "9w": "Sacrifice de dame : il attire le roi sur la colonne d ouverte.",
+        "10w": "Échec double (fou et tour) : le roi doit bouger.",
+        "11w": "Mat. Sur 10...Re8, c'était 11.Td8 mat."
+      }
+    },
+    {
+      "slug": "steinitz-bardeleben-1895",
+      "title": "Steinitz – von Bardeleben",
+      "subtitle": "Punir un roi qui ne roque pas",
+      "white": "Wilhelm Steinitz", "black": "Curt von Bardeleben", "year": 1895, "event": "Hastings",
+      "result": "1-0", "level": "intermediaire", "hero": "w", "guess": true, "expect_mate": false,
+      "themes": ["king_safety", "open_lines", "coordination", "sacrifice", "mating_attack"],
+      "summary": "Les Noirs perdent le droit de roquer et leur roi reste coincé au centre. Steinitz ouvre le jeu, installe un cavalier sur une case forte et termine par un sacrifice de tour spectaculaire.",
+      "lessons": [
+        "Un roi qui ne peut plus roquer devient la cible de toutes les pièces adverses.",
+        "Un pion sacrifié peut libérer une case clé pour une pièce (ici d4 pour le cavalier).",
+        "Quand les défenseurs sont surchargés, cherche le coup qui les déborde tous."
+      ],
+      "pgn": "1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.c3 Nf6 5.d4 exd4 6.cxd4 Bb4+ 7.Nc3 d5 8.exd5 Nxd5 9.O-O Be6 10.Bg5 Be7 11.Bxd5 Bxd5 12.Nxd5 Qxd5 13.Bxe7 Nxe7 14.Re1 f6 15.Qe2 Qd7 16.Rac1 c6 17.d5 cxd5 18.Nd4 Kf7 19.Ne6 Rhc8 20.Qg4 g6 21.Ng5+ Ke8 22.Rxe7+ Kf8 23.Rf7+ Kg8 24.Rg7+ Kh8 25.Rxh7+",
+      "notes": {
+        "14w": "La tour cloue le cavalier e7 sur le roi : les Noirs ne peuvent plus roquer tranquillement.",
+        "14b": "Pour libérer la case f7 au roi, les Noirs affaiblissent leur position.",
+        "17w": "Un pion offert pour ouvrir la case d4 au cavalier.",
+        "19w": "Le cavalier s'installe en e6, au cœur du camp noir.",
+        "22w": "La tour se sacrifie et ne peut pas être prise : chaque prise mène au mat ou à la perte de la dame.",
+        "25w": "Les Noirs abandonnent : le mat est inévitable. Tout est venu du roi resté au centre."
+      }
+    },
+    {
+      "slug": "lasker-thomas-1912",
+      "title": "Ed. Lasker – Thomas",
+      "subtitle": "La chasse au roi la plus célèbre",
+      "white": "Edward Lasker", "black": "George Alan Thomas", "year": 1912, "event": "Londres",
+      "result": "1-0", "level": "intermediaire", "hero": "w", "guess": true, "expect_mate": true,
+      "themes": ["mating_attack", "sacrifice", "double_check", "king_safety"],
+      "summary": "Un sacrifice de dame arrache le roi noir à son roque ; une série d'échecs le traîne ensuite à travers tout l'échiquier jusqu'au mat sur la première rangée.",
+      "lessons": [
+        "Avant de sacrifier, compte les échecs qui suivent : les coups forçants laissent peu de choix.",
+        "Un roi chassé de son abri peut être poursuivi jusqu'au mat.",
+        "Échec double et échec à la découverte sont les armes les plus fortes contre un roi exposé."
+      ],
+      "pgn": "1.d4 e6 2.Nf3 f5 3.Nc3 Nf6 4.Bg5 Be7 5.Bxf6 Bxf6 6.e4 fxe4 7.Nxe4 b6 8.Ne5 O-O 9.Bd3 Bb7 10.Qh5 Qe7 11.Qxh7+ Kxh7 12.Nxf6+ Kh6 13.Neg4+ Kg5 14.h4+ Kf4 15.g3+ Kf3 16.Be2+ Kg2 17.Rh2+ Kg1 18.Kd2#",
+      "notes": {
+        "10w": "La dame vise h7, avec le cavalier e5 et le fou d3.",
+        "11w": "Sacrifice de dame : il arrache le roi à son abri.",
+        "12w": "Échec double (cavalier et fou d3) : la chasse au roi commence.",
+        "14w": "Chaque coup est un échec : le roi noir n'a jamais le temps de souffler.",
+        "16w": "Le roi noir est arrivé dans le camp blanc, entouré de pièces adverses.",
+        "18w": "Le roi blanc démasque la tour a1 : mat ! (18.0-0-0 matait aussi.)"
+      }
+    },
+    {
+      "slug": "reti-etude-1921",
+      "title": "L'étude de Réti",
+      "subtitle": "Le roi qui court deux lièvres à la fois",
+      "white": "Richard Réti", "black": "Étude", "year": 1921, "event": "Étude de finale",
+      "result": "1/2-1/2", "level": "intermediaire", "hero": "w", "guess": true, "expect_mate": false,
+      "fen": "7K/8/k1P5/7p/8/8/8/8 w - - 0 1",
+      "themes": ["endgame", "king_activity", "conversion"],
+      "summary": "Le roi blanc semble trop loin pour rattraper le pion h et trop loin pour soutenir son pion c. En marchant en diagonale, il menace les deux à la fois et sauve la nulle.",
+      "lessons": [
+        "En finale, le roi est une pièce active : il peut poursuivre deux objectifs en même temps.",
+        "Règle du carré : vérifie toujours si un roi peut rattraper un pion passé.",
+        "En diagonale, le roi va aussi vite qu'en ligne droite tout en couvrant plus de cases utiles."
+      ],
+      "pgn": "1.Kg7 h4 2.Kf6 Kb6 3.Ke5 Kxc6 4.Kf4",
+      "notes": {
+        "1w": "Le roi poursuit le pion h… tout en se rapprochant de son propre pion.",
+        "2w": "La diagonale magique : chaque pas sert les deux objectifs.",
+        "2b": "Sur 2...h3, 3.Re7 h2 4.c7 et le pion blanc va à dame aussi.",
+        "3w": "Si le roi noir prend le pion c6, le roi blanc entre dans le carré du pion h.",
+        "4w": "Le pion h est rattrapé : nulle. Un roi actif sauve une finale « perdue »."
+      }
+    },
+    {
+      "slug": "lucena",
+      "title": "La position de Lucena",
+      "subtitle": "Gagner une finale de tours : construire un pont",
+      "white": "Position type", "black": "Position type", "year": 1497, "event": "Finale de tours",
+      "result": "1-0", "level": "intermediaire", "hero": "w", "guess": true, "expect_mate": false,
+      "fen": "1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1",
+      "themes": ["endgame", "conversion", "king_activity"],
+      "summary": "La finale de tours la plus importante à connaître : le roi blanc est devant son pion, mais les échecs de la tour noire l'empêchent de sortir. La méthode : repousser le roi adverse, puis « construire un pont » avec sa tour.",
+      "lessons": [
+        "Coupe le roi adverse de ton pion avec ta tour, puis éloigne-le encore d'une colonne.",
+        "Le pont : ta tour sur la 4e rangée pour stopper les échecs latéraux.",
+        "En finale de tours, l'activité du roi et de la tour compte plus qu'un pion."
+      ],
+      "pgn": "1.Rd1+ Ke7 2.Rd4 Ra1 3.Kc7 Rc1+ 4.Kb6 Rb1+ 5.Kc6 Rc1+ 6.Kb5 Rb1+ 7.Rb4",
+      "notes": {
+        "1w": "D'abord, un échec pour repousser le roi noir d'une colonne supplémentaire.",
+        "2w": "Le pont : la tour se place sur la 4e rangée pour plus tard couper les échecs.",
+        "3w": "Le roi sort enfin de devant son pion : les échecs commencent.",
+        "6w": "Le roi s'approche de sa tour…",
+        "7w": "… et la tour s'interpose : plus d'échecs, le pion va à dame."
+      }
+    },
+    {
+      "slug": "immortelle-1851",
+      "title": "L'Immortelle",
+      "subtitle": "Le développement vaut plus que le matériel",
+      "white": "Adolf Anderssen", "black": "Lionel Kieseritzky", "year": 1851, "event": "Londres",
+      "result": "1-0", "level": "avance", "hero": "w", "guess": true, "expect_mate": true,
+      "themes": ["development", "sacrifice", "mating_attack", "greed", "coordination"],
+      "summary": "Anderssen donne un fou, deux tours puis sa dame : la dame noire est partie trop loin et les pièces noires ne sont pas développées. Trois pièces mineures suffisent à mater.",
+      "lessons": [
+        "Le développement et l'activité des pièces valent souvent plus que le matériel.",
+        "Une dame partie gloutonner loin de son roi ne peut plus le défendre.",
+        "Compte les pièces qui participent réellement à l'attaque, pas le matériel total."
+      ],
+      "pgn": "1.e4 e5 2.f4 exf4 3.Bc4 Qh4+ 4.Kf1 b5 5.Bxb5 Nf6 6.Nf3 Qh6 7.d3 Nh5 8.Nh4 Qg5 9.Nf5 c6 10.g4 Nf6 11.Rg1 cxb5 12.h4 Qg6 13.h5 Qg5 14.Qf3 Ng8 15.Bxf4 Qf6 16.Nc3 Bc5 17.Nd5 Qxb2 18.Bd6 Bxg1 19.e5 Qxa1+ 20.Ke2 Na6 21.Nxg7+ Kd8 22.Qf6+ Nxf6 23.Be7#",
+      "notes": {
+        "11b": "Les Noirs ont gagné une pièce… mais leurs pièces restent sur leur case de départ.",
+        "15w": "Les Blancs se développent tout en reprenant leur pion.",
+        "17w": "Anderssen laisse prendre ses tours : il compte sur son avance de développement.",
+        "18w": "Il offre la deuxième tour : la dame noire, partie vers a1, ne pourra pas revenir défendre.",
+        "21w": "Cavaliers et fou encerclent le roi noir.",
+        "22w": "Dernier sacrifice : la dame dévie le cavalier qui défendait e7.",
+        "23w": "Mat avec trois pièces mineures face à une armée noire presque intacte… mais absente."
+      }
+    },
+    {
+      "slug": "toujours-jeune-1852",
+      "title": "La « Toujours jeune »",
+      "subtitle": "Quand les deux rois sont menacés, les échecs décident",
+      "white": "Adolf Anderssen", "black": "Jean Dufresne", "year": 1852, "event": "Berlin",
+      "result": "1-0", "level": "avance", "hero": "w", "guess": true, "expect_mate": true,
+      "themes": ["mating_attack", "sacrifice", "double_check", "open_lines"],
+      "summary": "Les Noirs menacent de mater en un coup, mais Anderssen enchaîne une série de coups forçants : sacrifice de tour, sacrifice de dame et échec double.",
+      "lessons": [
+        "Quand les deux rois sont en danger, celui qui joue des coups forçants (échecs) l'emporte.",
+        "L'échec double est l'arme absolue : seul le roi peut répondre.",
+        "Ouvrir les colonnes vers le roi adverse justifie un sacrifice."
+      ],
+      "pgn": "1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.b4 Bxb4 5.c3 Ba5 6.d4 exd4 7.O-O d3 8.Qb3 Qf6 9.e5 Qg6 10.Re1 Nge7 11.Ba3 b5 12.Qxb5 Rb8 13.Qa4 Bb6 14.Nbd2 Bb7 15.Ne4 Qf5 16.Bxd3 Qh5 17.Nf6+ gxf6 18.exf6 Rg8 19.Rad1 Qxf3 20.Rxe7+ Nxe7 21.Qxd7+ Kxd7 22.Bf5+ Ke8 23.Bd7+ Kf8 24.Bxe7#",
+      "notes": {
+        "4w": "Le gambit Evans : un pion pour gagner du temps et le centre.",
+        "17w": "Le cavalier se sacrifie : après la reprise, le pion e5 avance en f6 et la colonne e s'ouvre vers le roi noir.",
+        "19b": "Les Noirs menacent de mater en g2… mais c'est aux Blancs de jouer.",
+        "20w": "Début d'une combinaison entièrement forcée.",
+        "21w": "Sacrifice de dame : le roi est attiré sur d7.",
+        "22w": "Échec double (fou et tour d1).",
+        "24w": "Mat : chaque coup blanc était un échec, les Noirs n'ont jamais eu le temps de mater."
+      }
+    },
+    {
+      "slug": "rotlewi-rubinstein-1907",
+      "title": "Rotlewi – Rubinstein",
+      "subtitle": "Les deux fous braqués sur le roi",
+      "white": "Georg Rotlewi", "black": "Akiba Rubinstein", "year": 1907, "event": "Łódź",
+      "result": "0-1", "level": "avance", "hero": "b", "guess": true, "expect_mate": false,
+      "themes": ["sacrifice", "deflection", "mating_attack", "coordination"],
+      "summary": "Rubinstein installe ses fous sur les grandes diagonales, puis enchaîne trois sacrifices pour dévier les défenseurs du roi blanc.",
+      "lessons": [
+        "Deux fous sur des diagonales ouvertes vers le roi sont un danger mortel.",
+        "La déviation : détourner la pièce qui défend la case clé.",
+        "Calcule les coups forçants jusqu'au bout avant de lâcher du matériel."
+      ],
+      "pgn": "1.d4 d5 2.Nf3 e6 3.e3 c5 4.c4 Nc6 5.Nc3 Nf6 6.dxc5 Bxc5 7.a3 a6 8.b4 Bd6 9.Bb2 O-O 10.Qd2 Qe7 11.Bd3 dxc4 12.Bxc4 b5 13.Bd3 Rd8 14.Qe2 Bb7 15.O-O Ne5 16.Nxe5 Bxe5 17.f4 Bc7 18.e4 Rac8 19.e5 Bb6+ 20.Kh1 Ng4 21.Be4 Qh4 22.g3 Rxc3 23.gxh4 Rd2 24.Qxd2 Bxe4+ 25.Qg2 Rh3",
+      "notes": {
+        "14b": "Le fou rejoint la grande diagonale : les deux fous visent le roque blanc.",
+        "20b": "Le cavalier entre en jeu avec la menace sur h2.",
+        "21b": "La dame menace h2, appuyée par les fous braqués sur le roi blanc.",
+        "22b": "Rubinstein ignore l'attaque sur sa dame !",
+        "23b": "Déviation : la dame blanche est détournée de la défense du fou e4.",
+        "24b": "Les deux fous sur les grandes diagonales.",
+        "25b": "Le mat en h2 est imparable : les Blancs abandonnent."
+      }
+    },
+    {
+      "slug": "byrne-fischer-1956",
+      "title": "La partie du siècle",
+      "subtitle": "Un sacrifice de dame et des pièces parfaitement coordonnées",
+      "white": "Donald Byrne", "black": "Robert James Fischer", "year": 1956, "event": "New York",
+      "result": "0-1", "level": "avance", "hero": "b", "guess": true, "expect_mate": true,
+      "themes": ["sacrifice", "double_check", "conversion", "coordination", "mating_attack"],
+      "summary": "À 13 ans, Fischer sacrifie sa dame pour une tour, deux fous et un cavalier coordonnés. La fin montre comment convertir : toutes les pièces travaillent ensemble jusqu'au mat.",
+      "lessons": [
+        "Des pièces coordonnées valent plus qu'une dame isolée.",
+        "Le « moulin » (échecs à la découverte répétés) permet de ramasser du matériel.",
+        "Pour convertir un avantage, coordonne tes pièces contre le roi au lieu de courir après le matériel."
+      ],
+      "pgn": "1.Nf3 Nf6 2.c4 g6 3.Nc3 Bg7 4.d4 O-O 5.Bf4 d5 6.Qb3 dxc4 7.Qxc4 c6 8.e4 Nbd7 9.Rd1 Nb6 10.Qc5 Bg4 11.Bg5 Na4 12.Qa3 Nxc3 13.bxc3 Nxe4 14.Bxe7 Qb6 15.Bc4 Nxc3 16.Bc5 Rfe8+ 17.Kf1 Be6 18.Bxb6 Bxc4+ 19.Kg1 Ne2+ 20.Kf1 Nxd4+ 21.Kg1 Ne2+ 22.Kf1 Nc3+ 23.Kg1 axb6 24.Qb4 Ra4 25.Qxb6 Nxd1 26.h3 Rxa2 27.Kh2 Nxf2 28.Re1 Rxe1 29.Qd8+ Bf8 30.Nxe1 Bd5 31.Nf3 Ne4 32.Qb8 b5 33.h4 h5 34.Ne5 Kg7 35.Kg1 Bc5+ 36.Kf1 Ng3+ 37.Ke1 Bb4+ 38.Kd1 Bb3+ 39.Kc1 Ne2+ 40.Kb1 Nc3+ 41.Kc1 Rc2#",
+      "notes": {
+        "11b": "Le cavalier s'offre pour ouvrir le jeu contre le roi blanc resté au centre.",
+        "17b": "Le coup du siècle : Fischer laisse prendre sa dame.",
+        "18b": "Début du « moulin » : échecs à la découverte successifs du fou et du cavalier.",
+        "23b": "Bilan : tour, deux fous et cavalier contre la dame. Les pièces noires sont coordonnées.",
+        "35b": "La phase de conversion : toutes les pièces noires se rapprochent du roi blanc.",
+        "41b": "Mat : toutes les pièces noires participent."
+      }
+    }
+  ]
+}

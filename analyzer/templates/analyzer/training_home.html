@@ -1,0 +1,119 @@
+{% extends "analyzer/base.html" %}
+{% load chess_extras %}
+{% block title %}Exercices{% endblock %}
+{% block content %}
+
+<section class="train-hero">
+  <div>
+    <span class="eyebrow">{% icon "target" %} Exercices à thème</span>
+    <h1>Entraîne ton œil tactique</h1>
+    <p class="hero-lead">Des exercices classés par thème et adaptés à ton niveau. Chaque résultat est enregistré : ton classement évolue et tu vois les thèmes qui progressent… ou qui coincent.</p>
+    <div class="row" style="margin-top:1.1rem">
+      <a class="btn btn-primary" href="{% url 'analyzer:training_play' 'mix' %}">{% icon "play" %} Commencer</a>
+      {% if ov.to_review %}<a class="btn" href="{% url 'analyzer:training_play' 'review' %}">{% icon "repeat" %} Révisions <span class="badge badge-important">{{ ov.to_review }}</span></a>{% endif %}
+      <a class="btn btn-ghost" href="{% url 'analyzer:training_progress' %}">{% icon "chart" %} Ma progression</a>
+    </div>
+  </div>
+  <div class="card rating-card">
+    <div class="rating-top">
+      <div>
+        <div class="kpi-label">Ton classement exercices</div>
+        <div class="rating-value">{{ ov.rating }}</div>
+      </div>
+      <div class="rating-side">
+        <div title="Exercices réussis d'affilée"><span class="streak">{% icon "flame" %} {{ ov.streak }}</span><div class="faint small">série</div></div>
+        <div><b class="tabular">{{ ov.rate|default_if_none:"—" }}{% if ov.rate is not None %} %{% endif %}</b><div class="faint small">réussite</div></div>
+        <div><b class="tabular">{{ ov.attempts }}</b><div class="faint small">essais</div></div>
+      </div>
+    </div>
+    {% if ov.history|length > 1 %}<div class="chart-box" id="rating-chart"></div>{{ ov.history|json_script:"rating-data" }}{% endif %}
+    <div class="activity" aria-label="Activité des 30 derniers jours">
+      {% for d in ov.days %}<span class="day lvl-{% if d.n == 0 %}0{% elif d.n < 5 %}1{% elif d.n < 15 %}2{% else %}3{% endif %}" title="{{ d.date|date:'d/m' }} : {{ d.n }} exercice{{ d.n|pluralize }}"></span>{% endfor %}
+    </div>
+    <div class="faint small" style="margin-top:.4rem">30 derniers jours · {{ ov.today }} aujourd'hui{% if ov.active_days_streak > 1 %} · {{ ov.active_days_streak }} jours d'affilée{% endif %}</div>
+  </div>
+</section>
+
+{% if recommended %}
+<section class="section">
+  <div class="section-head">
+    <div><h2>{% icon "bulb" %} Recommandés pour toi</h2>
+      <p class="section-intro">D'après le diagnostic de « {{ rec_export.name }} » : les thèmes qui travaillent tes faiblesses.</p></div>
+  </div>
+  <div class="theme-grid">
+    {% for t in recommended %}
+    <a class="card theme-card is-reco" href="{% url 'analyzer:training_play' t.key %}" style="--lvl: var(--{% if t.level == 'critique' %}bad{% elif t.level == 'important' %}warn{% else %}info{% endif %})">
+      <span class="theme-icon">{% icon t.icon %}</span>
+      <span class="theme-body">
+        <span class="theme-title">{{ t.label }}</span>
+        <span class="theme-desc">Parce que : {{ t.because|lower }}</span>
+      </span>
+      <span class="theme-count">{% if t.key == 'mine' and not t.count %}à créer{% else %}{{ t.count }}{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head">
+    <div><h2>{% icon "king" %} Tes parties deviennent des exercices</h2>
+      <p class="section-intro">Chess Coach reprend les positions où tu t'es trompé et te les repropose : trouve le bon coup cette fois-ci.</p></div>
+  </div>
+  {% if exports %}
+  <div class="grid grid-2">
+    {% for e in exports %}
+    <div class="card gen-card" data-gen-status="{% url 'analyzer:training_generate_status' e.pk %}" data-running="{% if e.puzzle_job.running %}1{% endif %}">
+      <div class="row row-tight" style="flex-wrap:nowrap">
+        <span class="avatar" aria-hidden="true">{{ e.player|first }}</span>
+        <div style="min-width:0;flex:1"><b>{{ e.name }}</b><div class="muted small">{{ e.n_done }} parties analysées · {{ e.n_scanned }} parcourues · <b data-gen-count>{{ e.n_puzzles }}</b> exercices</div></div>
+      </div>
+      <div class="muted small" data-gen-message {% if not e.puzzle_job.message %}hidden{% endif %}>{{ e.puzzle_job.message }}</div>
+      <div class="row row-tight">
+        <form method="post" action="{% url 'analyzer:training_generate' e.pk %}">{% csrf_token %}
+          <button class="btn btn-small {% if not e.n_puzzles %}btn-primary{% endif %}" {% if not engine_ok or not e.n_done or e.puzzle_job.running %}disabled{% endif %} data-gen-button>
+            {% if e.puzzle_job.running %}<span class="dot-live"></span> Création en cours…{% elif e.n_scanned and e.n_scanned >= e.n_done %}{% icon "refresh" %} À jour{% else %}{% icon "zap" %} Créer mes exercices{% endif %}</button>
+        </form>
+        {% if e.n_puzzles %}<a class="btn btn-small btn-soft" href="{% url 'analyzer:training_play' 'mine' %}">{% icon "play" %} S'entraîner</a>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card empty">{% icon "upload" %}<p>Importe et analyse tes parties pour créer des exercices personnalisés.</p><a class="btn btn-primary" href="{% url 'analyzer:export_list' %}">Importer mes parties</a></div>
+  {% endif %}
+</section>
+
+{% for cat in categories %}
+<section class="section">
+  <div class="section-head"><h2>{{ cat.label }}</h2></div>
+  <div class="theme-grid">
+    {% for t in cat.items %}
+    <a class="card theme-card {% if not t.count %}is-empty{% endif %}" href="{% url 'analyzer:training_play' t.key %}" title="{{ t.description }}">
+      <span class="theme-icon">{% icon t.icon %}</span>
+      <span class="theme-body">
+        <span class="theme-title">{{ t.label }}</span>
+        <span class="theme-desc">{{ t.description }}</span>
+        {% if t.stats %}<span class="theme-progress"><span class="meter {% if t.stats.rate >= 70 %}good{% elif t.stats.rate < 45 %}bad{% else %}mid{% endif %}"><span style="width:{{ t.stats.rate|clamp_pct|css_num }}%"></span></span><span class="faint">{{ t.stats.rate }} % · {{ t.stats.n }} essai{{ t.stats.n|pluralize }}</span></span>{% endif %}
+      </span>
+      <span class="theme-count">{{ t.count }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+{% if references %}
+<section class="section">
+  <div class="section-head">
+    <div><h2>{% icon "book" %} À étudier aussi</h2><p class="section-intro">Des parties de référence choisies pour ton niveau et tes points faibles.</p></div>
+    <span class="spacer"></span><a class="btn btn-ghost btn-small" href="{% url 'analyzer:reference_list' %}">Toutes les parties {% icon "arrow-right" %}</a>
+  </div>
+  <div class="grid grid-3">{% for r in references %}{% include "analyzer/_reference_card.html" %}{% endfor %}</div>
+</section>
+{% endif %}
+
+<p class="faint small section">{% icon "code" %} {{ total }} exercices disponibles. Pour en ajouter des milliers, importe la base libre de Lichess (licence CC0) :
+  <code>python manage.py import_puzzles lichess_db_puzzle.csv</code> — voir le README.</p>
+{% endblock %}
+{% block scripts %}<script>ChessCoach.initTrainingHome();</script>{% endblock %}

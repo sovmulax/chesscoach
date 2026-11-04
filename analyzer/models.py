@@ -136,3 +136,107 @@ class Game(models.Model):
     @property
     def score(self):
         return {"win": 1.0, "draw": 0.5, "loss": 0.0}[self.player_result]
+
+
+# ---------------------------------------------------------------------------
+# Entraînement : exercices à thème et parties de référence.
+# Tables ajoutées sans toucher aux modèles Export / Game ci-dessus.
+# ---------------------------------------------------------------------------
+class Puzzle(models.Model):
+    """Un exercice au format Lichess : position, puis coup adverse « déclencheur » et solution.
+
+    `moves` = coups UCI séparés par des espaces : le 1er est joué par l'adversaire
+    (il crée l'occasion), puis alternent coup du joueur / réponse adverse.
+    """
+
+    SOURCE_BANK = "bank"
+    SOURCE_GAME = "game"
+    SOURCE_IMPORT = "import"
+    SOURCE_CHOICES = [
+        (SOURCE_BANK, "Banque intégrée"),
+        (SOURCE_GAME, "Tirée de tes parties"),
+        (SOURCE_IMPORT, "Importée"),
+    ]
+
+    uid = models.CharField(max_length=64, unique=True)
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=SOURCE_BANK)
+    fen = models.CharField("position avant le coup adverse", max_length=100)
+    moves = models.CharField("coups UCI (coup adverse puis solution)", max_length=400)
+    alternatives = models.CharField("autres premiers coups acceptés (UCI)", max_length=200, blank=True)
+    rating = models.IntegerField("difficulté", default=1500)
+    themes = models.CharField(max_length=400, blank=True,
+                              help_text="clés de thèmes séparées et encadrées par des espaces")
+    game = models.ForeignKey(Game, null=True, blank=True, on_delete=models.SET_NULL, related_name="puzzles")
+    ply = models.IntegerField(null=True, blank=True, help_text="indice du coup dans la partie d'origine")
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["rating", "id"]
+        indexes = [models.Index(fields=["source", "rating"])]
+
+    def __str__(self):
+        return f"Exercice {self.uid} ({self.rating})"
+
+    @property
+    def theme_list(self):
+        return self.themes.split()
+
+    @property
+    def move_list(self):
+        return self.moves.split()
+
+    @property
+    def player_moves(self):
+        return len(self.move_list) // 2
+
+
+class PuzzleAttempt(models.Model):
+    """Une tentative de résolution (historique conservé pour suivre la progression)."""
+
+    puzzle = models.ForeignKey(Puzzle, on_delete=models.CASCADE, related_name="attempts")
+    theme = models.CharField("thème travaillé", max_length=40, blank=True)
+    solved = models.BooleanField("réussi du premier coup")
+    mistakes = models.IntegerField(default=0)
+    used_hint = models.BooleanField(default=False)
+    seconds = models.FloatField(null=True, blank=True)
+    puzzle_rating = models.IntegerField("difficulté de l'exercice au moment de l'essai", null=True, blank=True)
+    rating_before = models.IntegerField()
+    rating_after = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["created_at"])]
+
+    def __str__(self):
+        return f"{'✓' if self.solved else '✗'} {self.puzzle.uid}"
+
+
+class PuzzleScan(models.Model):
+    """Partie déjà parcourue pour en tirer des exercices (évite de refaire le travail)."""
+
+    game = models.OneToOneField(Game, on_delete=models.CASCADE, related_name="puzzle_scan")
+    scanned_at = models.DateTimeField(auto_now=True)
+    created = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"Partie {self.game_id} : {self.created} exercice(s)"
+
+
+class ReferenceStudy(models.Model):
+    """Progression sur une partie de référence (catalogue : analyzer/data/reference_games.json)."""
+
+    slug = models.SlugField(max_length=80, unique=True)
+    viewed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    guess_correct = models.IntegerField(default=0)
+    guess_total = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.slug
+
+    @property
+    def guess_score(self):
+        return round(100 * self.guess_correct / self.guess_total) if self.guess_total else None
