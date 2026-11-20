@@ -17,7 +17,8 @@
 [data-palette="ardoise"]   { --nh: 220; --ns: 7%;  --ah: 222; --as: 22%; }
 
 /* ------------------------------------------------------------ échiquiers */
-:root, [data-board="bois"] { --sq-light: #f0d9b5; --sq-dark: #b58863; }
+:root, [data-board="chesscom"] { --sq-light: #ebecd0; --sq-dark: #739552; }
+[data-board="bois"] { --sq-light: #f0d9b5; --sq-dark: #b58863; }
 [data-board="tournoi"] { --sq-light: #eef0d4; --sq-dark: #789a59; }
 [data-board="glace"]   { --sq-light: #dfe6ea; --sq-dark: #8aa3b1; }
 [data-board="ardoise"] { --sq-light: #e3e3df; --sq-dark: #8d9196; }
@@ -69,6 +70,64 @@
   --ease: cubic-bezier(.2, .7, .2, 1);
   --dur: .22s;
 }
+/* ------------------------------------------------------- charte Chess.com
+   Thème par défaut : reprend la charte de chess.com (fond brun-gris sombre,
+   vert « Play » #81b64c, boutons en relief, échiquier vert). */
+[data-palette="chesscom"] {
+  --nh: 30; --ns: 6%; --ah: 89; --as: 42%;
+  --bg:        light-dark(#f1f1ef, #312e2b);
+  --bg-grad:   transparent;
+  --surface:   light-dark(#ffffff, #262522);
+  --surface-2: light-dark(#ecebe9, #3c3a37);
+  --surface-3: light-dark(#dedcd9, #4b4847);
+  --border:    light-dark(#e2e0dc, #3c3a37);
+  --border-strong: light-dark(#c9c6c1, #52504d);
+  --text:      light-dark(#312e2b, #ffffff);
+  --muted:     light-dark(#5d5955, #c3c2c1);
+  --faint:     light-dark(#8b8987, #989795);
+  --accent:      #81b64c;
+  --accent-hover:#a3d160;
+  --accent-soft: light-dark(#e6f1da, #3a4a2c);
+  --accent-text: light-dark(#4f8a2a, #a3d160);
+  --on-accent:   #ffffff;
+  --accent-edge: #45753c;
+  --good: light-dark(#4f8a2a, #95bb4a);  --good-soft: light-dark(#e6f1da, #33402a);
+  --bad:  light-dark(#d23f2c, #fa6a59);  --bad-soft:  light-dark(#fbe1dd, #47302c);
+  --warn: light-dark(#b8780c, #f7c631);  --warn-soft: light-dark(#fbeccf, #463c23);
+  --info: light-dark(#3f6f9a, #749bbf);  --info-soft: light-dark(#dfeafb, #2c3540);
+  --c-best: #81b64c; --c-good: #95b776; --c-inaccuracy: #f7c631; --c-mistake: #ffa459; --c-blunder: #fa412d;
+  --c-arrow-best: #81b64c; --c-last: rgba(255, 255, 51, .5);
+  --radius-lg: 10px; --radius: 8px; --radius-sm: 6px; --radius-xs: 4px;
+  --shadow-sm: none;
+  --shadow:    light-dark(0 1px 3px #0000001a, 0 1px 0 #0003);
+  --shadow-lg: light-dark(0 10px 30px #0002, 0 10px 30px #0008);
+  --ring: 0 0 0 3px #81b64c66;
+  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
+  --font-display: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
+}
+[data-palette="chesscom"] body { background: var(--bg); }
+[data-palette="chesscom"] h1, [data-palette="chesscom"] h2 { font-weight: 800; letter-spacing: -.01em; }
+[data-palette="chesscom"] .topbar { background: light-dark(#ffffff, #262522); border-bottom-color: light-dark(#e2e0dc, #1d1c1a);
+  backdrop-filter: none; -webkit-backdrop-filter: none; }
+[data-palette="chesscom"] .brand { font-weight: 800; }
+[data-palette="chesscom"] .brand-mark { background: #81b64c; color: #fff; border-radius: 6px; box-shadow: 0 3px 0 #45753c; }
+[data-palette="chesscom"] .brand-mark-sm { box-shadow: none; }
+[data-palette="chesscom"] .mainnav a { border-radius: 6px; font-weight: 700; }
+[data-palette="chesscom"] .mainnav a.active { background: var(--surface-2); color: var(--text); box-shadow: inset 3px 0 0 #81b64c; }
+[data-palette="chesscom"] .card { border-color: transparent; }
+[data-palette="chesscom"] .btn { border-radius: 6px; font-weight: 700; border-color: transparent; background: var(--surface-2);
+  box-shadow: 0 3px 0 light-dark(#c9c6c1, #22211f); }
+[data-palette="chesscom"] .btn:hover { background: var(--surface-3); }
+[data-palette="chesscom"] .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 light-dark(#c9c6c1, #22211f); }
+[data-palette="chesscom"] .btn-primary { background: #81b64c; color: #fff; box-shadow: 0 4px 0 #45753c; text-shadow: 0 1px 0 #0003; }
+[data-palette="chesscom"] .btn-primary:hover { background: #a3d160; }
+[data-palette="chesscom"] .btn-primary:active { box-shadow: 0 2px 0 #45753c; }
+[data-palette="chesscom"] .btn-ghost, [data-palette="chesscom"] .btn-soft { box-shadow: none; }
+[data-palette="chesscom"] .btn-ghost { background: transparent; }
+[data-palette="chesscom"] .controls .ctrl.primary { box-shadow: 0 3px 0 #45753c; }
+[data-palette="chesscom"] .evalbar { background: #403d39; }
+[data-palette="chesscom"] .evalbar > .fill { background: #ffffff; }
+
 [data-mode="light"] { color-scheme: light; }
 [data-mode="dark"]  { color-scheme: dark; }
 [data-motion="off"] { --dur: 0s; }

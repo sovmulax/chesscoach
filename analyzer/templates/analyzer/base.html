@@ -1,12 +1,12 @@
 {% load static chess_extras %}<!doctype html>
-<html lang="fr" data-mode="auto" data-palette="classique" data-board="bois" data-motion="on">
+<html lang="fr" data-mode="dark" data-palette="chesscom" data-board="chesscom" data-motion="on">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Chess Coach{% endblock %} · Chess Coach</title>
 <meta name="description" content="Chess Coach : analyse tes parties d'échecs avec Stockfish, en local, et reçois un diagnostic et un plan d'entraînement.">
 {# Applique le thème choisi avant le premier rendu (pas de flash). Préférences stockées dans le navigateur uniquement. #}
-<script>(function(){try{var d=document.documentElement,s=window.localStorage;["mode","palette","board","motion"].forEach(function(k){var v=s.getItem("cc-"+k);if(v)d.setAttribute("data-"+k,v);});}catch(e){}})();</script>
+<script>(function(){try{var d=document.documentElement,s=window.localStorage;if(s.getItem("cc-charte")!=="chesscom"){["mode","palette","board"].forEach(function(k){s.removeItem("cc-"+k);});s.setItem("cc-charte","chesscom");}["mode","palette","board","motion"].forEach(function(k){var v=s.getItem("cc-"+k);if(v)d.setAttribute("data-"+k,v);});}catch(e){}})();</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="{% static 'analyzer/app.css' %}">
 </head>

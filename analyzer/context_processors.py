@@ -6,6 +6,7 @@ entrée ici et le bloc CSS correspondant dans static/analyzer/app.css.
 """
 
 PALETTES = [
+    ("chesscom", "Chess.com"),
     ("classique", "Classique"),
     ("ocean", "Océan"),
     ("foret", "Forêt"),
@@ -14,6 +15,7 @@ PALETTES = [
 ]
 
 BOARDS = [
+    ("chesscom", "Chess.com"),
     ("bois", "Bois"),
     ("tournoi", "Tournoi"),
     ("glace", "Glace"),

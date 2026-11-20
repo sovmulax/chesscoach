@@ -55,6 +55,17 @@ python manage.py runserver
 
 Ouvre <http://127.0.0.1:8000>. (Raccourci : `lancer.bat` sous Windows, `./lancer.sh` sinon.)
 
+### En arrière-plan avec synchro automatique (macOS / Linux)
+
+```bash
+./start.sh   # serveur sur http://127.0.0.1:8765 + synchro Chess.com toutes les 10 min
+./stop.sh    # arrête le serveur, la synchro et les analyses en cours
+```
+
+Tout continue de tourner après la fermeture du terminal. Réglages :
+`CHESSCOACH_PORT` (port, 8765 par défaut), `CHESSCOACH_SYNC_MINUTES` (intervalle, 10),
+`CHESSCOACH_USER` (pseudo à relier au premier lancement). Journaux et PID dans `run/`.
+
 ---
 
 ## 2. Utilisation
@@ -88,6 +99,7 @@ le tableau de bord d'un compte si la dernière date de plus de 12 h
 ```bash
 python manage.py sync_chesscom --user sovmulax          # 1re fois : crée le compte et importe tout
 python manage.py sync_chesscom                          # ensuite : tous les comptes reliés
+python manage.py sync_chesscom --every 10               # en boucle, toutes les 10 min
 ```
 
 - **Windows** (Planificateur de tâches, tous les jours à 7 h) :

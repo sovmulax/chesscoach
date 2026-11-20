@@ -1,4 +1,7 @@
+import time
+
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from analyzer.models import Export
 from analyzer.services import chesscom, jobs
@@ -13,8 +16,24 @@ class Command(BaseCommand):
         parser.add_argument("--time-classes", default="", help="ex. rapid,blitz (création seulement)")
         parser.add_argument("--full", action="store_true", help="retélécharger toutes les archives")
         parser.add_argument("--no-analyze", action="store_true", help="ne pas lancer Stockfish après la synchro")
+        parser.add_argument("--every", type=float, default=0, metavar="MINUTES",
+                            help="tourner en boucle : resynchroniser toutes les MINUTES (utilisé par start.sh)")
 
     def handle(self, *args, **opts):
+        if not opts["every"]:
+            return self.sync_once(opts)
+        interval = max(1.0, opts["every"]) * 60
+        self.stdout.write(f"Synchro automatique toutes les {opts['every']:g} min (Ctrl+C pour arrêter).")
+        while True:
+            self.stdout.write(f"[{timezone.localtime():%Y-%m-%d %H:%M:%S}] synchronisation…")
+            try:
+                self.sync_once(opts)
+            except Exception as exc:  # la boucle ne doit jamais s'arrêter sur une erreur passagère
+                self.stderr.write(self.style.ERROR(f"Échec de la synchro : {exc}"))
+            self.stdout.flush()
+            time.sleep(interval)
+
+    def sync_once(self, opts):
         if opts["user"]:
             try:
                 export, created = chesscom.create_chesscom_export(opts["user"], opts["time_classes"])
@@ -37,6 +56,9 @@ class Command(BaseCommand):
                 continue
             self.stdout.write(self.style.SUCCESS(f"{export.player} : {msg}"))
             if added and not opts["no_analyze"] and export.auto_analyze:
+                if jobs.export_running(export):
+                    self.stdout.write(f"{export.player} : analyse déjà en cours ailleurs, les nouvelles parties suivront.")
+                    continue
                 jobs._run_export(export.pk, None, False)
                 export.refresh_from_db()
                 self.stdout.write(self.style.SUCCESS(f"{export.player} : {export.job_message}"))
